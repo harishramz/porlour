@@ -5,6 +5,7 @@ import { requireSupabase, supabase } from '../lib/supabase.js';
 import { appointmentsRouter } from './appointments.js';
 import { createCatalogRouter } from './catalog.js';
 import { profilesRouter } from './profiles.js';
+import { reportsRouter } from './reports.js';
 
 export const apiRouter = Router();
 
@@ -12,7 +13,7 @@ apiRouter.get('/health', (req, res) => res.json({ status: 'ok' }));
 apiRouter.get('/auth/me', requireSupabase, authenticate, asyncHandler(async (req, res) => {
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, email, full_name, role')
+    .select('id, email, full_name, phone, date_of_birth, avatar_url, address, preferences, role')
     .eq('id', req.auth.id)
     .single();
   if (error) throw error;
@@ -26,3 +27,4 @@ apiRouter.use('/reviews', createCatalogRouter('salon_reviews', { customerCanCrea
 apiRouter.use('/gallery', createCatalogRouter('gallery_items'));
 apiRouter.use('/appointments', appointmentsRouter);
 apiRouter.use('/customers', profilesRouter);
+apiRouter.use('/reports', reportsRouter);

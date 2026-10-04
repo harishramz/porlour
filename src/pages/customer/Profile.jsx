@@ -3,6 +3,8 @@ import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { Button } from '../../components/Button';
 import { Modal } from '../../components/Modal';
+import { ImageField } from '../../components/ImageField';
+import { supabaseConfigured } from '../../services/supabase';
 import {
   User,
   Mail,
@@ -15,12 +17,13 @@ import {
 } from '../../components/icons';
 
 export const CustomerProfile = () => {
-  const { user, updateUserProfile } = useAuth();
+  const { user, updateUserProfile, updatePassword } = useAuth();
   const { addToast } = useToast();
 
   const [formData, setFormData] = useState({
     name: user?.name || 'Harish Varma',
     email: user?.email || 'harish.varma@example.com',
+    avatar: user?.avatar || '',
     phone: user?.phone || '+91 98765 43210',
     dob: user?.dob || '1992-05-14',
     address: user?.address || '12 Emerald Boulevard, Race Course, Coimbatore',
@@ -46,6 +49,7 @@ export const CustomerProfile = () => {
       await updateUserProfile({
         name: formData.name,
         email: formData.email,
+        avatar: formData.avatar,
         phone: formData.phone,
         dob: formData.dob,
         address: formData.address,
@@ -65,19 +69,27 @@ export const CustomerProfile = () => {
     }
   };
 
-  const handlePasswordSubmit = (e) => {
+  const handlePasswordSubmit = async (e) => {
     e.preventDefault();
     if (passwordData.newPassword !== passwordData.confirmPassword) {
       addToast('New passwords do not match.', 'error');
       return;
     }
     setPasswordSaving(true);
-    setTimeout(() => {
-      setPasswordSaving(false);
+    try {
+      if (supabaseConfigured) {
+        await updatePassword(passwordData.newPassword);
+      } else {
+        await new Promise((resolve) => setTimeout(resolve, 400));
+      }
       setShowPasswordModal(false);
       setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
       addToast('Password updated securely!', 'success');
-    }, 400);
+    } catch (error) {
+      addToast(error.message || 'Unable to update the password.', 'error');
+    } finally {
+      setPasswordSaving(false);
+    }
   };
 
   return (
@@ -112,7 +124,7 @@ export const CustomerProfile = () => {
           <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6 pb-6 border-b border-beige-100">
             <div className="relative group">
               <img
-                src={user?.avatar || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80'}
+                src={formData.avatar || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80'}
                 alt={formData.name}
                 className="w-24 h-24 rounded-full object-cover border-2 border-gold-400 shadow-premium"
               />
@@ -136,6 +148,12 @@ export const CustomerProfile = () => {
               </div>
             </div>
           </div>
+          <ImageField
+            label="Profile Photo"
+            folder="profile"
+            value={formData.avatar}
+            onChange={(avatar) => setFormData({ ...formData, avatar })}
+          />
 
           {/* Form Fields: Name, Email, Phone, DOB */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
@@ -164,6 +182,7 @@ export const CustomerProfile = () => {
                 <input
                   type="email"
                   required
+                  readOnly={supabaseConfigured}
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   className="w-full text-xs sm:text-sm pl-10 pr-3 py-2.5 rounded-xl border border-beige-300 focus:outline-none focus:ring-2 focus:ring-gold-400 bg-cream-50/40"
@@ -298,7 +317,7 @@ export const CustomerProfile = () => {
         subtitle="Ensure your account remains safe with a strong passcode."
       >
         <form onSubmit={handlePasswordSubmit} className="space-y-4 pt-2">
-          <div>
+          {!supabaseConfigured && <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-charcoal-700 mb-1">
               Current Password
             </label>
@@ -310,7 +329,7 @@ export const CustomerProfile = () => {
               placeholder="••••••••"
               className="w-full text-xs sm:text-sm p-3 rounded-xl border border-beige-300 focus:outline-none focus:ring-2 focus:ring-gold-400"
             />
-          </div>
+          </div>}
 
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-charcoal-700 mb-1">
@@ -319,6 +338,7 @@ export const CustomerProfile = () => {
             <input
               type="password"
               required
+              minLength={8}
               value={passwordData.newPassword}
               onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
               placeholder="Min 8 characters"

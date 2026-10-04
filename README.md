@@ -179,29 +179,46 @@ python3 -m http.server 3000
 
 ## Node.js + Express API
 
-The API lives in `server/` and uses Supabase Auth for identity and Supabase Postgres for salon data. The Express server verifies Supabase access tokens, reads each user's role from `profiles`, and restricts administrative mutations to users whose database profile has the `admin` role. The Supabase service-role key is server-only; never add it to a `VITE_` variable or frontend code.
+The optional API lives in `server/` and uses `@supabase/server` for Supabase JWT verification and server-side database access. It reads each user's role from `profiles` and restricts administrative mutations to users whose database profile has the `admin` role. `SUPABASE_SECRET_KEY` bypasses RLS and must stay server-only; never add it to a `VITE_` variable or frontend code.
+
+The website's public catalog and admin content management (services, staff, offers, reviews, gallery), appointment operations, customer directory, and reports use the authenticated Supabase client directly. Public reads and admin writes are protected by the policies in `server/supabase/schema.sql`; updates are stored in Supabase and are returned to public pages on their next data load. Signing into the admin portal seeds the existing sample catalog only when each corresponding database table is empty.
+
+Admin forms for gallery images, service images, offer banners, and staff profile photos, along with the customer profile photo form, accept either a direct image URL or a local image upload. Local uploads are saved in the public `salon-media` Supabase Storage bucket (JPEG, PNG, WebP, or GIF, up to 8 MB); the resulting public URL is saved with the catalog/profile record. The schema creates the bucket and policies: anyone may view published media, admins may manage salon media, and signed-in customers may upload into their own profile folder. If uploads say “Bucket not found,” rerun the complete `server/supabase/schema.sql` in the SQL Editor for the same Supabase project configured in `.env.local`, or create a public Storage bucket named `salon-media` with an 8 MB limit and the supported image MIME types. For a URL, provide a publicly accessible direct image URL rather than a Google search-results page.
 
 ### Setup
 
-1. Create a Supabase project and run `server/supabase/schema.sql` in its SQL Editor.
-2. Copy `server/.env.example` to `server/.env`, then set the project URL, anon key, and service-role key from Supabase project settings.
-3. Install and start the API from the repository root:
+1. Create a Supabase project and run `server/supabase/schema.sql` in its SQL Editor. It backfills profiles for existing Auth users and installs secure login-time recovery for missing profiles; this is a one-time setup for that project.
+2. Copy `.env.example` to `.env.local` and set `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` using the project's URL and publishable key.
+3. For immediate email/password signup without verification emails, open **Authentication → Sign In / Providers → Email** in the Supabase dashboard and turn off **Confirm email**. Save the change. New accounts can then sign in immediately after signup. Accounts created earlier while confirmation was required may need to be manually confirmed once under **Authentication → Users**. Keep email confirmation enabled if verified email ownership is required for your application.
+4. The optional Express API needs `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, and `SUPABASE_JWKS_URL` in `server/.env`. Keep the secret only in `server/.env`; never put it in a `VITE_` variable or commit it. The direct Supabase flows described above do not require the Express API secret.
+5. To create or reset the admin Auth account and set its profile role together, add the following values to the ignored `server/.env` file:
+
+```dotenv
+ADMIN_EMAIL=admin@example.com
+ADMIN_PASSWORD=choose-a-strong-password
+```
+
+Then run this one-time command from the repository root:
 
 ```bash
-npm --prefix server install
+npm run server:admin-setup
+```
+
+The script uses `SUPABASE_SECRET_KEY` only on the server to create the Auth user if needed (or reset its password if it exists), confirm its email, and set `profiles.role` to `admin`. It never sends the admin password to the browser. Remove `ADMIN_PASSWORD` from `server/.env` after provisioning if you do not need to reset it again.
+
+6. Start the frontend:
+
+```bash
+npm run dev
+```
+
+Start the optional API separately when needed:
+
+```bash
 npm run server:dev
 ```
 
-The API listens on `http://localhost:4000`. Vite proxies `/api` requests to it. `GET /api/health` works before credentials are configured; Supabase-backed routes return `503` until the server environment is set.
-
-After registering your first account through Supabase Auth, grant admin access to that profile from the SQL Editor:
-
-```sql
-update public.profiles p
-set role = 'admin'
-from auth.users u
-where p.id = u.id and u.email = 'admin@example.com';
-```
+The API listens on `http://localhost:4000`. Vite proxies `/api` requests to it. `GET /api/health` works before credentials are configured; Supabase-backed API routes return `503` until the server environment is set. Restart Vite after editing `.env.local`.
 
 ### API routes
 
@@ -211,4 +228,4 @@ where p.id = u.id and u.email = 'admin@example.com';
 - `/api/appointments` lists a customer's own bookings or all bookings for an admin; supports booking, details, cancellation, and admin status updates.
 - `GET /api/appointments/availability/slots?date=YYYY-MM-DD&staffId=staff-id` checks booked times.
 
-Protected API requests must include `Authorization: Bearer <supabase-access-token>`. The current React login and data functions remain demo/localStorage implementations; this API scaffold does not switch those UI flows to Supabase automatically. The public Supabase client and auth calls still need to be wired into the frontend before real user sign-in uses this API.
+The app sends authenticated requests to Supabase using row-level security. With the frontend Supabase URL and publishable key configured, registration, password login, Google OAuth, profile updates, bookings, and salon content use Supabase directly. Without those frontend keys, the app retains its local demo mode.

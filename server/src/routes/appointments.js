@@ -35,6 +35,25 @@ const serialize = (row) => ({
 });
 
 export const appointmentsRouter = Router();
+
+appointmentsRouter.get('/availability/slots', requireSupabase, asyncHandler(async (req, res) => {
+  const date = z.string().date().parse(req.query.date);
+  const staffId = typeof req.query.staffId === 'string' ? req.query.staffId : 'any';
+  let query = supabase
+    .from('appointments')
+    .select('time, staff_id')
+    .eq('date', date)
+    .neq('status', 'Cancelled');
+  if (staffId !== 'any') query = query.eq('staff_id', staffId);
+
+  const { data, error } = await query;
+  if (error) throw error;
+
+  const times = ['10:00 AM', '11:00 AM', '12:00 PM', '02:00 PM', '03:00 PM', '04:00 PM', '05:00 PM'];
+  const booked = new Set((data || []).map((appointment) => appointment.time));
+  res.json(times.map((time) => ({ time, isAvailable: !booked.has(time) })));
+}));
+
 appointmentsRouter.use(requireSupabase, authenticate);
 
 appointmentsRouter.get('/', asyncHandler(async (req, res) => {
@@ -66,7 +85,7 @@ appointmentsRouter.post('/', asyncHandler(async (req, res) => {
       customer_id: customerId,
       date: body.date,
       time: body.time,
-      staff_id: body.staffId || null,
+      staff_id: body.staffId && body.staffId !== 'any' ? body.staffId : null,
       status: data.status,
       data
     })
@@ -74,24 +93,6 @@ appointmentsRouter.post('/', asyncHandler(async (req, res) => {
     .single();
   if (error) throw error;
   res.status(201).json(serialize(row));
-}));
-
-appointmentsRouter.get('/availability/slots', asyncHandler(async (req, res) => {
-  const date = z.string().date().parse(req.query.date);
-  const staffId = typeof req.query.staffId === 'string' ? req.query.staffId : 'any';
-  let query = supabase
-    .from('appointments')
-    .select('time, staff_id')
-    .eq('date', date)
-    .neq('status', 'Cancelled');
-  if (staffId !== 'any') query = query.eq('staff_id', staffId);
-
-  const { data, error } = await query;
-  if (error) throw error;
-
-  const times = ['10:00 AM', '11:00 AM', '12:00 PM', '02:00 PM', '03:00 PM', '04:00 PM', '05:00 PM'];
-  const booked = new Set((data || []).map((appointment) => appointment.time));
-  res.json(times.map((time) => ({ time, isAvailable: !booked.has(time) })));
 }));
 
 appointmentsRouter.get('/:id', asyncHandler(async (req, res) => {

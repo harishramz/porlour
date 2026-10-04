@@ -1,25 +1,66 @@
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { Button } from '../components/Button';
 import { Sparkles, Mail, Lock, User, ShieldCheck, ArrowRight } from '../components/icons';
+import { supabaseConfigured } from '../services/supabase';
 
 export const Login = () => {
-  const { login, loginAsCustomer, loginAsAdmin } = useAuth();
+  const {
+    user,
+    authLoading,
+    loginAsCustomer,
+    loginAsAdmin,
+    signInWithPassword,
+    signInWithGoogle,
+    resendSignupConfirmation
+  } = useAuth();
   const { addToast } = useToast();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
-  const [email, setEmail] = useState('harish.varma@example.com');
-  const [password, setPassword] = useState('password123');
+  const getReturnPath = (fallback) => {
+    const path = searchParams.get('returnTo');
+    return path?.startsWith('/') && !path.startsWith('//') ? path : fallback;
+  };
+  const returnTo = searchParams.get('returnTo');
+
+  const [signupConfirmationSent, setSignupConfirmationSent] = useState(
+    searchParams.get('confirmation') === 'sent'
+  );
+  const [emailConfirmed, setEmailConfirmed] = useState(
+    searchParams.get('confirmation') === 'confirmed'
+  );
+  const [email, setEmail] = useState(
+    searchParams.get('email') || (supabaseConfigured ? '' : 'harish.varma@example.com')
+  );
+  const [password, setPassword] = useState(supabaseConfigured ? '' : 'password123');
   const [loading, setLoading] = useState(false);
+  const [needsConfirmation, setNeedsConfirmation] = useState(false);
 
-  const handleSubmit = (e) => {
+  useEffect(() => {
+    if (supabaseConfigured && !authLoading && user?.isAuthenticated) {
+      navigate(getReturnPath(user.role === 'admin' ? '/admin' : '/dashboard'), { replace: true });
+    }
+  }, [authLoading, navigate, returnTo, user]);
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    setSignupConfirmationSent(false);
+    setEmailConfirmed(false);
     setLoading(true);
 
-    setTimeout(() => {
-      setLoading(false);
+    try {
+      if (supabaseConfigured) {
+        setNeedsConfirmation(false);
+        const authenticatedUser = await signInWithPassword(email, password);
+        addToast('Welcome back!', 'success');
+        navigate(getReturnPath(authenticatedUser.role === 'admin' ? '/admin' : '/dashboard'));
+        return;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 400));
       if (email.toLowerCase().includes('admin')) {
         loginAsAdmin();
         addToast('Welcome back, Admin Manager!', 'success');
@@ -29,13 +70,54 @@ export const Login = () => {
         addToast('Welcome back, Harish!', 'success');
         navigate('/dashboard');
       }
-    }, 400);
+    } catch (error) {
+      const message = error.message?.toLowerCase() || '';
+      const confirmationRequired = error.code === 'email_not_confirmed' || message.includes('email not confirmed');
+      const apiNotConfigured = message.includes('supabase is not configured');
+      setNeedsConfirmation(confirmationRequired);
+      addToast(
+        confirmationRequired
+          ? 'Confirm your email address before signing in. You can request another confirmation email below.'
+          : apiNotConfigured
+            ? 'The API cannot load your profile yet. Configure SUPABASE_SECRET_KEY in server/.env, then restart the API.'
+          : error.message || 'Unable to sign in.',
+        'error'
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleGoogleLogin = () => {
-    loginAsCustomer();
-    addToast('Authenticated with Google as Harish Varma.', 'success');
-    navigate('/dashboard');
+  const handleResendConfirmation = async () => {
+    setLoading(true);
+    try {
+      await resendSignupConfirmation(email);
+      addToast('Confirmation email requested. Check your inbox and spam folder.', 'success');
+    } catch (error) {
+      const message = error.message?.toLowerCase() || '';
+      addToast(
+        message.includes('rate limit')
+          ? 'Supabase email limit reached. Wait before requesting another message, or configure custom SMTP.'
+          : error.message || 'Unable to resend the confirmation email.',
+        'error'
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    try {
+      if (supabaseConfigured) {
+        await signInWithGoogle();
+        return;
+      }
+      loginAsCustomer();
+      addToast('Authenticated with Google as Harish Varma.', 'success');
+      navigate('/dashboard');
+    } catch (error) {
+      addToast(error.message || 'Unable to sign in with Google.', 'error');
+    }
   };
 
   return (
@@ -77,7 +159,7 @@ export const Login = () => {
             </div>
 
             {/* Quick 1-Click Demo Logins */}
-            <div className="bg-cream-50 p-3.5 rounded-2xl border border-beige-200 mb-6">
+            {!supabaseConfigured && <div className="bg-cream-50 p-3.5 rounded-2xl border border-beige-200 mb-6">
               <span className="text-[11px] font-bold text-charcoal-600 uppercase tracking-wider block mb-2 text-center">
                 Instant Demo Access:
               </span>
@@ -107,7 +189,7 @@ export const Login = () => {
                   Admin Manager
                 </button>
               </div>
-            </div>
+            </div>}
 
             {/* Sign in Form */}
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -163,6 +245,36 @@ export const Login = () => {
                 Sign In
               </Button>
             </form>
+
+            {(needsConfirmation || signupConfirmationSent) && (
+              <div
+                role="status"
+                className="mt-4 rounded-xl border border-gold-200 bg-gold-50 px-4 py-3 text-sm text-charcoal-700"
+              >
+                Confirm your email address before signing in. Check your inbox and spam folder,
+                or request a new confirmation email below.
+              </div>
+            )}
+
+            {emailConfirmed && (
+              <div
+                role="status"
+                className="mt-4 rounded-xl border border-gold-200 bg-gold-50 px-4 py-3 text-sm text-charcoal-700"
+              >
+                Your email is confirmed. Sign in with your email and password to continue.
+              </div>
+            )}
+
+            {(needsConfirmation || signupConfirmationSent) && (
+              <button
+                type="button"
+                onClick={handleResendConfirmation}
+                disabled={loading || !email}
+                className="w-full mt-3 text-sm font-semibold text-gold-700 underline disabled:opacity-50"
+              >
+                Resend confirmation email
+              </button>
+            )}
 
             <div className="relative my-6 text-center">
               <div className="absolute inset-0 flex items-center">

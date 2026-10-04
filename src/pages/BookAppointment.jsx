@@ -11,6 +11,7 @@ import {
 import { Button } from '../components/Button';
 import { Badge } from '../components/Badge';
 import { Loading } from '../components/Loading';
+import { supabaseConfigured } from '../services/supabase';
 import {
   Scissors,
   User,
@@ -28,7 +29,7 @@ import {
 export const BookAppointment = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, authLoading } = useAuth();
   const { addToast } = useToast();
 
   const preselectedServiceId = searchParams.get('serviceId');
@@ -53,14 +54,24 @@ export const BookAppointment = () => {
 
   // Customer Contact Info (Step 5)
   const [customerDetails, setCustomerDetails] = useState({
-    name: user?.name || 'Harish Varma',
-    email: user?.email || 'harish.varma@example.com',
-    phone: user?.phone || '+91 98765 43210',
+    name: user?.name || (supabaseConfigured ? '' : 'Harish Varma'),
+    email: user?.email || (supabaseConfigured ? '' : 'harish.varma@example.com'),
+    phone: user?.phone || (supabaseConfigured ? '' : '+91 98765 43210'),
     notes: ''
   });
 
   const [submitting, setSubmitting] = useState(false);
   const [confirmedBooking, setConfirmedBooking] = useState(null);
+
+  useEffect(() => {
+    if (!user?.isAuthenticated) return;
+    setCustomerDetails((current) => ({
+      ...current,
+      name: user.name || current.name,
+      email: user.email || current.email,
+      phone: user.phone || current.phone
+    }));
+  }, [user?.id, user?.name, user?.email, user?.phone, user?.isAuthenticated]);
 
   // Fetch services and staff on load
   useEffect(() => {
@@ -206,6 +217,26 @@ export const BookAppointment = () => {
 
   if (loading) {
     return <Loading fullScreen text="Preparing appointment booking suite..." />;
+  }
+
+  if (supabaseConfigured && authLoading) {
+    return <Loading fullScreen text="Restoring your account..." />;
+  }
+
+  if (supabaseConfigured && !user?.isAuthenticated) {
+    const returnTo = `${window.location.pathname}${window.location.search}`;
+    return (
+      <div className="max-w-xl mx-auto px-4 py-20 text-center">
+        <h1 className="font-serif text-3xl font-bold text-charcoal-900">Sign in to book your appointment</h1>
+        <p className="mt-3 text-sm text-charcoal-600">Your booking will be linked to your Aura Luxe account.</p>
+        <Link
+          to={`/login?returnTo=${encodeURIComponent(returnTo)}`}
+          className="inline-flex mt-6 px-6 py-3 rounded-full bg-gold-500 text-charcoal-950 font-semibold"
+        >
+          Sign in to continue
+        </Link>
+      </div>
+    );
   }
 
   // ==========================================

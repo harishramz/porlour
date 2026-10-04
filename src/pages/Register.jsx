@@ -1,14 +1,18 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { Button } from '../components/Button';
 import { Sparkles, User, Mail, Phone, Lock } from '../components/icons';
+import { supabaseConfigured } from '../services/supabase';
 
 export const Register = () => {
-  const { login } = useAuth();
+  const { login, signUp } = useAuth();
   const { addToast } = useToast();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const returnPath = searchParams.get('returnTo');
+  const successPath = returnPath?.startsWith('/') && !returnPath.startsWith('//') ? returnPath : '/dashboard';
 
   const [formData, setFormData] = useState({
     fullName: '',
@@ -20,7 +24,7 @@ export const Register = () => {
   });
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
 
     if (formData.password !== formData.confirmPassword) {
@@ -33,8 +37,25 @@ export const Register = () => {
     }
 
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
+    try {
+      if (supabaseConfigured) {
+        const result = await signUp({
+          name: formData.fullName,
+          email: formData.email,
+          phone: formData.phone,
+          password: formData.password
+        });
+        if (result.requiresEmailConfirmation) {
+          addToast('Account created. Check your email to confirm your address, then sign in.', 'success');
+          navigate(`/login?confirmation=sent&email=${encodeURIComponent(formData.email)}`);
+          return;
+        }
+        addToast(`Welcome to Aura Luxe, ${formData.fullName}!`, 'success');
+        navigate(successPath);
+        return;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 450));
       const newCustomer = {
         id: `cust-${Date.now()}`,
         name: formData.fullName,
@@ -49,7 +70,17 @@ export const Register = () => {
       login(newCustomer);
       addToast(`Welcome to Aura Luxe, ${formData.fullName}!`, 'success');
       navigate('/dashboard');
-    }, 450);
+    } catch (error) {
+      const message = error.message?.toLowerCase() || '';
+      addToast(
+        message.includes('rate limit') || error.status === 429
+          ? 'Supabase email limit reached. Wait before trying again, or configure custom SMTP in Supabase Auth settings.'
+          : error.message || 'Unable to create your account.',
+        'error'
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

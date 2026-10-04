@@ -5,6 +5,7 @@ import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
 import { Modal } from '../../components/Modal';
 import { Loading } from '../../components/Loading';
+import { ImageField } from '../../components/ImageField';
 import { Tag, Plus, Edit3, Trash2, CheckCircle, Sparkles } from '../../components/icons';
 
 export const AdminOffers = () => {
@@ -33,7 +34,7 @@ export const AdminOffers = () => {
 
   const fetchOffersData = async () => {
     try {
-      const data = await getOffers();
+      const data = await getOffers({ includeInactive: true });
       setOffers(data);
     } catch (err) {
       console.error('Failed to load offers', err);
@@ -309,18 +310,13 @@ export const AdminOffers = () => {
             </div>
           </div>
 
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-charcoal-700 mb-1">
-              Banner Image URL
-            </label>
-            <input
-              type="url"
-              required
-              value={formData.image}
-              onChange={(e) => setFormData({ ...formData, image: e.target.value })}
-              className="w-full text-xs sm:text-sm p-3 rounded-xl border border-beige-300 focus:outline-none focus:ring-2 focus:ring-gold-400"
-            />
-          </div>
+          <ImageField
+            label="Offer Banner Image"
+            folder="offers"
+            value={formData.image}
+            onChange={(image) => setFormData({ ...formData, image })}
+            required
+          />
 
           <div className="pt-4 flex justify-end gap-2 border-t border-beige-200">
             <Button variant="secondary" onClick={() => setModalOpen(false)}>

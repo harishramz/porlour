@@ -4,6 +4,7 @@ import { useToast } from '../../context/ToastContext';
 import { Button } from '../../components/Button';
 import { Modal } from '../../components/Modal';
 import { Loading } from '../../components/Loading';
+import { ImageField } from '../../components/ImageField';
 import { Image, Plus, Trash2, Eye, Sparkles } from '../../components/icons';
 
 export const AdminGallery = () => {
@@ -199,18 +200,13 @@ export const AdminGallery = () => {
             </select>
           </div>
 
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-charcoal-700 mb-1">
-              Image URL
-            </label>
-            <input
-              type="url"
-              required
-              value={formData.image}
-              onChange={(e) => setFormData({ ...formData, image: e.target.value })}
-              className="w-full text-xs sm:text-sm p-3 rounded-xl border border-beige-300 focus:outline-none focus:ring-2 focus:ring-gold-400"
-            />
-          </div>
+          <ImageField
+            label="Gallery Image"
+            folder="gallery"
+            value={formData.image}
+            onChange={(image) => setFormData({ ...formData, image })}
+            required
+          />
 
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-charcoal-700 mb-1">

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Outlet, NavLink, Link, useNavigate } from 'react-router-dom';
+import { Outlet, NavLink, Link, Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { DemoBar } from '../components/DemoBar';
@@ -16,9 +16,10 @@ import {
   Plus
 } from '../components/icons';
 import { Button } from '../components/Button';
+import { supabaseConfigured } from '../services/supabase';
 
 export const CustomerLayout = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, authLoading } = useAuth();
   const { addToast } = useToast();
   const navigate = useNavigate();
 
@@ -35,6 +36,13 @@ export const CustomerLayout = () => {
     { label: 'Saved Favorites', path: '/favorites', icon: Heart },
     { label: 'My Reviews', path: '/reviews', icon: Star }
   ];
+
+  if (supabaseConfigured) {
+    if (authLoading) return null;
+    if (user.role !== 'customer') {
+      return <Navigate to={user.role === 'admin' ? '/admin' : '/login'} replace />;
+    }
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-[#FDFBF7] text-charcoal-900">

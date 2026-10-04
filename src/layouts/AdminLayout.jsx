@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Outlet, NavLink, Link, useNavigate } from 'react-router-dom';
+import { Outlet, NavLink, Link, Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { DemoBar } from '../components/DemoBar';
@@ -22,9 +22,10 @@ import {
   CheckCircle
 } from '../components/icons';
 import { Button } from '../components/Button';
+import { supabaseConfigured } from '../services/supabase';
 
 export const AdminLayout = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, authLoading } = useAuth();
   const { addToast } = useToast();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -45,6 +46,11 @@ export const AdminLayout = () => {
     { label: 'Gallery Showcase', path: '/admin/gallery', icon: Image },
     { label: 'Business Reports', path: '/admin/reports', icon: BarChart2 }
   ];
+
+  if (authLoading) return null;
+  if (user?.role !== 'admin') {
+    return <Navigate to={user?.isAuthenticated ? '/dashboard' : '/admin/login'} replace />;
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-[#F8F6F2] text-charcoal-900">

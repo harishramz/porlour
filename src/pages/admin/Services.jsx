@@ -10,6 +10,7 @@ import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
 import { Modal } from '../../components/Modal';
 import { Loading } from '../../components/Loading';
+import { ImageField } from '../../components/ImageField';
 import {
   Scissors,
   Plus,
@@ -60,7 +61,7 @@ export const AdminServices = () => {
 
   const fetchServicesData = async () => {
     try {
-      const data = await getServices();
+      const data = await getServices({ includeInactive: true });
       setServices(data);
     } catch (err) {
       console.error('Failed to fetch services', err);
@@ -371,15 +372,12 @@ export const AdminServices = () => {
             </div>
 
             <div className="sm:col-span-2">
-              <label className="block text-xs font-semibold uppercase tracking-wider text-charcoal-700 mb-1">
-                Image URL (Unsplash or hosted)
-              </label>
-              <input
-                type="url"
-                required
+              <ImageField
+                label="Service Image"
+                folder="services"
                 value={formData.image}
-                onChange={(e) => setFormData({ ...formData, image: e.target.value })}
-                className="w-full text-xs sm:text-sm p-3 rounded-xl border border-beige-300 focus:outline-none focus:ring-2 focus:ring-gold-400"
+                onChange={(image) => setFormData({ ...formData, image })}
+                required
               />
             </div>
 

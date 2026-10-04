@@ -3,11 +3,13 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { Sparkles, User, ShieldCheck, LogOut, ExternalLink } from './icons';
+import { supabaseConfigured } from '../services/supabase';
 
 export const DemoBar = () => {
   const { user, role, loginAsCustomer, loginAsAdmin, logout } = useAuth();
   const { addToast } = useToast();
   const navigate = useNavigate();
+  if (supabaseConfigured) return null;
 
   const handleRoleChange = (targetRole) => {
     if (targetRole === 'customer') {

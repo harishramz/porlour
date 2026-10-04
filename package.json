@@ -8,9 +8,12 @@
     "build": "vite build",
     "preview": "vite preview",
     "server:dev": "npm --prefix server run dev",
-    "server:start": "npm --prefix server start"
+    "server:start": "npm --prefix server start",
+    "server:seed": "npm --prefix server run seed",
+    "server:admin-setup": "npm --prefix server run admin:setup"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.117.2",
     "lucide-react": "^0.344.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",

@@ -1,23 +1,53 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { Button } from '../components/Button';
 import { Mail, CheckCircle, ArrowLeft } from '../components/icons';
+import { supabaseConfigured } from '../services/supabase';
 
 export const ForgotPassword = () => {
+  const { sendPasswordReset, updatePassword, logout } = useAuth();
   const { addToast } = useToast();
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const returnTo = searchParams.get('returnTo') === '/admin/login' ? '/admin/login' : '/login';
   const [email, setEmail] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
+  const isResetMode = searchParams.get('mode') === 'reset';
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    if (isResetMode && newPassword !== confirmPassword) {
+      addToast('Passwords do not match.', 'error');
+      return;
+    }
+
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
+    try {
+      if (isResetMode) {
+        await updatePassword(newPassword);
+        await logout();
+        addToast('Password updated. Sign in with your new password.', 'success');
+        navigate(returnTo);
+        return;
+      }
+
+      if (supabaseConfigured) {
+        await sendPasswordReset(email, `/forgot-password?mode=reset&returnTo=${encodeURIComponent(returnTo)}`);
+      } else {
+        await new Promise((resolve) => setTimeout(resolve, 400));
+      }
       setSubmitted(true);
       addToast('Reset instructions sent to your email address.', 'success');
-    }, 400);
+    } catch (error) {
+      addToast(error.message || 'Unable to process password recovery.', 'error');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -34,7 +64,7 @@ export const ForgotPassword = () => {
               <strong className="text-charcoal-900">{email}</strong>.
             </p>
             <div className="pt-4">
-              <Link to="/login">
+              <Link to={returnTo}>
                 <Button variant="secondary" size="md" className="w-full">
                   Return to Sign In
                 </Button>
@@ -48,15 +78,42 @@ export const ForgotPassword = () => {
                 Account Recovery
               </span>
               <h2 className="font-serif text-3xl font-bold text-charcoal-900">
-                Forgot Password?
+                {isResetMode ? 'Choose a New Password' : 'Forgot Password?'}
               </h2>
               <p className="text-xs sm:text-sm text-charcoal-600 mt-2 leading-relaxed">
-                Provide your registered email address and we will send you a secure link to reset your credentials.
+                {isResetMode
+                  ? 'Enter and confirm your new password to secure your account.'
+                  : 'Provide your registered email address and we will send you a secure link to reset your credentials.'}
               </p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4 text-left">
-              <div>
+              {isResetMode ? (
+                <>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-charcoal-700">
+                    New Password
+                    <input
+                      type="password"
+                      required
+                      minLength={8}
+                      value={newPassword}
+                      onChange={(event) => setNewPassword(event.target.value)}
+                      className="mt-1.5 w-full text-xs sm:text-sm px-3 py-2.5 rounded-xl border border-beige-300 focus:outline-none focus:ring-2 focus:ring-gold-400 bg-cream-50/30"
+                    />
+                  </label>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-charcoal-700">
+                    Confirm New Password
+                    <input
+                      type="password"
+                      required
+                      minLength={8}
+                      value={confirmPassword}
+                      onChange={(event) => setConfirmPassword(event.target.value)}
+                      className="mt-1.5 w-full text-xs sm:text-sm px-3 py-2.5 rounded-xl border border-beige-300 focus:outline-none focus:ring-2 focus:ring-gold-400 bg-cream-50/30"
+                    />
+                  </label>
+                </>
+              ) : <div>
                 <label className="block text-xs font-semibold uppercase tracking-wider text-charcoal-700 mb-1.5">
                   Email Address
                 </label>
@@ -71,7 +128,7 @@ export const ForgotPassword = () => {
                     className="w-full text-xs sm:text-sm pl-10 pr-3 py-2.5 rounded-xl border border-beige-300 focus:outline-none focus:ring-2 focus:ring-gold-400 bg-cream-50/30"
                   />
                 </div>
-              </div>
+              </div>}
 
               <Button
                 type="submit"
@@ -80,13 +137,13 @@ export const ForgotPassword = () => {
                 loading={loading}
                 className="w-full shadow-gold"
               >
-                Send Reset Link
+                {isResetMode ? 'Update Password' : 'Send Reset Link'}
               </Button>
             </form>
 
             <div className="pt-4 border-t border-beige-100">
               <Link
-                to="/login"
+                to={returnTo}
                 className="inline-flex items-center gap-1.5 text-xs text-charcoal-600 hover:text-charcoal-900 font-medium"
               >
                 <ArrowLeft size={14} /> Back to Login
