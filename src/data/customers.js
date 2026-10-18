@@ -5,7 +5,8 @@ export const initialCustomers = [
     email: 'harish.varma@example.com',
     phone: '+91 98765 43210',
     dob: '1992-05-14',
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80',
+    avatar: '',
+    isVip: false,
     address: '12 Emerald Boulevard, Race Course, Coimbatore',
     preferences: {
       skinType: 'Combination / Sensitive',
@@ -17,7 +18,7 @@ export const initialCustomers = [
     totalAppointments: 6,
     totalSpending: 18700,
     lastVisit: '24 Sep 2026',
-    status: 'VIP Customer'
+    status: 'Active'
   },
   {
     id: 'cust-2',
@@ -25,7 +26,8 @@ export const initialCustomers = [
     email: 'aishwarya.rajan@example.com',
     phone: '+91 98450 11223',
     dob: '1995-11-20',
-    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
+    avatar: '',
+    isVip: false,
     address: '45 Lake View Residency, RS Puram, Coimbatore',
     preferences: {
       skinType: 'Normal to Dry',
@@ -37,7 +39,7 @@ export const initialCustomers = [
     totalAppointments: 11,
     totalSpending: 42500,
     lastVisit: '28 Sep 2026',
-    status: 'Bridal Elite'
+    status: 'Active'
   },
   {
     id: 'cust-3',
@@ -45,7 +47,8 @@ export const initialCustomers = [
     email: 'sunita.menon@example.com',
     phone: '+91 97910 88990',
     dob: '1988-03-08',
-    avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=400&q=80',
+    avatar: '',
+    isVip: false,
     address: '88 Avinashi Road, Peelamedu, Coimbatore',
     preferences: {
       skinType: 'Oily',
@@ -65,7 +68,8 @@ export const initialCustomers = [
     email: 'roshni.p@example.com',
     phone: '+91 94432 77654',
     dob: '1998-08-25',
-    avatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=400&q=80',
+    avatar: '',
+    isVip: false,
     address: '23 Gandhi Park Road, Coimbatore',
     preferences: {
       skinType: 'Dry',

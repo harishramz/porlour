@@ -2,7 +2,9 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 
 const FavoritesContext = createContext(null);
 
-const FAVORITES_STORAGE_KEY = 'aura_luxe_favorite_services';
+// Favorites are opt-in. The versioned key prevents old demo defaults from
+// appearing as customer-selected favorites after this behavior changed.
+const FAVORITES_STORAGE_KEY = 'aura_luxe_favorite_services_v2';
 
 export const FavoritesProvider = ({ children }) => {
   const [favoriteIds, setFavoriteIds] = useState(() => {
@@ -12,7 +14,7 @@ export const FavoritesProvider = ({ children }) => {
     } catch (e) {
       console.error('Failed to parse favorites', e);
     }
-    return ['srv-1', 'srv-5', 'srv-8']; // Default favorites for initial delight
+    return [];
   });
 
   useEffect(() => {

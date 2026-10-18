@@ -4,19 +4,29 @@ import { z } from 'zod';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import { authenticate, requireRole } from '../middleware/auth.js';
 import { requireSupabase, supabase } from '../lib/supabase.js';
+import { resolveServicePricing } from '../lib/catalogPricing.js';
+import { verifyRazorpayPayment } from '../lib/razorpay.js';
 
 const appointmentSchema = z.object({
   serviceId: z.string().min(1),
+  serviceOptionId: z.string().optional(),
+  serviceVariantIds: z.array(z.string()).max(50).optional(),
   serviceName: z.string().optional(),
   category: z.string().optional(),
   staffId: z.string().optional().nullable(),
   staffName: z.string().optional(),
   date: z.string().date(),
   time: z.string().min(1),
+  formattedDate: z.string().optional(),
   duration: z.string().optional(),
   price: z.coerce.number().nonnegative(),
+  paymentMethod: z.enum(['after_treatment', 'online']).default('after_treatment'),
+  razorpayOrderId: z.string().regex(/^order_[A-Za-z0-9]+$/).optional(),
+  razorpayPaymentId: z.string().regex(/^pay_[A-Za-z0-9]+$/).optional(),
+  razorpaySignature: z.string().regex(/^[a-f0-9]{64}$/i).optional(),
   notes: z.string().max(2000).optional(),
   customerName: z.string().optional(),
+  customerId: z.string().uuid().nullable().optional(),
   customerEmail: z.string().email().optional(),
   customerPhone: z.string().optional()
 });
@@ -67,15 +77,49 @@ appointmentsRouter.get('/', asyncHandler(async (req, res) => {
 appointmentsRouter.post('/', asyncHandler(async (req, res) => {
   const body = appointmentSchema.parse(req.body);
   const id = randomUUID();
-  const customerId = req.auth.role === 'admin' && typeof req.body.customerId === 'string'
-    ? req.body.customerId
+  if (req.auth.role !== 'admin' && req.body.customerId === null) {
+    return res.status(403).json({ error: 'Only admins can create unlinked walk-in appointments.' });
+  }
+  const customerId = req.auth.role === 'admin'
+    ? req.body.customerId ?? null
     : req.auth.id;
+  if (customerId === null && !body.customerName?.trim()) {
+    return res.status(400).json({ error: 'Enter the walk-in customer name.' });
+  }
+  const pricing = await resolveServicePricing(body);
+  let paymentDetails = null;
+  if (body.paymentMethod === 'online') {
+    if (!body.razorpayOrderId || !body.razorpayPaymentId || !body.razorpaySignature) {
+      return res.status(400).json({ error: 'Complete the online payment before confirming the appointment.' });
+    }
+    paymentDetails = await verifyRazorpayPayment({
+      orderId: body.razorpayOrderId,
+      paymentId: body.razorpayPaymentId,
+      signature: body.razorpaySignature,
+      expectedAmount: pricing.amount,
+      expectedUserId: req.auth.id,
+      expectedServiceId: body.serviceId
+    });
+  }
+  const {
+    razorpayOrderId,
+    razorpayPaymentId,
+    razorpaySignature,
+    price: submittedPrice,
+    ...appointmentFields
+  } = body;
   const data = {
-    ...body,
+    ...appointmentFields,
     id,
     customerId,
     status: 'Confirmed',
-    createdAt: new Date().toISOString()
+    createdAt: new Date().toISOString(),
+    price: pricing.price,
+    paymentStatus: paymentDetails?.status || 'unpaid',
+    ...(paymentDetails ? {
+      razorpayOrderId: paymentDetails.orderId,
+      razorpayPaymentId: paymentDetails.paymentId
+    } : {})
   };
 
   const { data: row, error } = await supabase
@@ -92,6 +136,7 @@ appointmentsRouter.post('/', asyncHandler(async (req, res) => {
     .select('*')
     .single();
   if (error) throw error;
+
   res.status(201).json(serialize(row));
 }));
 

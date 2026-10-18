@@ -8,15 +8,14 @@ import { Badge } from '../components/Badge';
 import { Loading } from '../components/Loading';
 import { StaffCard } from '../components/StaffCard';
 import { ReviewCard } from '../components/ReviewCard';
+import { getServiceOptions, selectServiceOption } from '../utils/serviceOptions';
 import {
-  Star,
   Clock,
   Heart,
   CheckCircle,
   ArrowLeft,
   ArrowRight,
   Sparkles,
-  ShieldCheck,
   Calendar,
   User
 } from '../components/icons';
@@ -31,6 +30,7 @@ export const ServiceDetails = () => {
   const [allStaff, setAllStaff] = useState([]);
   const [reviews, setReviews] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [selectedOptionId, setSelectedOptionId] = useState(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -41,6 +41,7 @@ export const ServiceDetails = () => {
           getReviews()
         ]);
         setService(srv);
+        setSelectedOptionId(getServiceOptions(srv)[0]?.id || null);
         setAllStaff(staffList);
         setReviews(allReviews.filter((r) => r.serviceName.toLowerCase().includes(srv.name.toLowerCase().slice(0, 10))));
       } catch (err) {
@@ -69,6 +70,9 @@ export const ServiceDetails = () => {
   }
 
   const isFav = isFavorite(service.id);
+  const serviceOptions = getServiceOptions(service);
+  const selectedService = selectServiceOption(service, selectedOptionId);
+  const hasVariants = Array.isArray(service.variants) && service.variants.length > 0;
   const assignedStaff = allStaff.filter((st) => (service.staffIds || []).includes(st.id));
 
   const handleFavoriteToggle = () => {
@@ -133,15 +137,15 @@ export const ServiceDetails = () => {
                 </span>
               </div>
               <div className="bg-white p-3.5 rounded-xl border border-beige-200 text-center">
-                <span className="text-[11px] text-charcoal-500 uppercase tracking-wider block">Rating</span>
+                <span className="text-[11px] text-charcoal-500 uppercase tracking-wider block">Category</span>
                 <span className="text-sm font-bold text-charcoal-900 font-serif flex items-center justify-center gap-1 mt-0.5">
-                  <Star size={14} className="text-gold-500 fill-gold-500" /> {service.rating} ({service.reviewsCount})
+                  {service.category}
                 </span>
               </div>
               <div className="bg-white p-3.5 rounded-xl border border-beige-200 text-center">
-                <span className="text-[11px] text-charcoal-500 uppercase tracking-wider block">Hygiene</span>
-                <span className="text-sm font-bold text-emerald-700 font-serif flex items-center justify-center gap-1 mt-0.5">
-                  <ShieldCheck size={14} /> 100% Sterile
+                <span className="text-[11px] text-charcoal-500 uppercase tracking-wider block">Pricing</span>
+                <span className="text-sm font-bold text-charcoal-900 font-serif flex items-center justify-center gap-1 mt-0.5">
+                  Salon menu
                 </span>
               </div>
             </div>
@@ -152,7 +156,7 @@ export const ServiceDetails = () => {
             <div>
               <div className="flex items-center gap-2 mb-2">
                 <span className="text-xs uppercase tracking-[0.2em] text-gold-700 font-semibold">
-                  Aura Luxe Ritual
+                Her Glow Service
                 </span>
               </div>
               <h1 className="font-serif text-3xl sm:text-4xl font-bold text-charcoal-900 leading-tight">
@@ -163,89 +167,113 @@ export const ServiceDetails = () => {
               </p>
             </div>
 
+            {hasVariants && (
+              <fieldset className="p-4 rounded-2xl border border-beige-200 space-y-3">
+                <legend className="px-1 text-xs font-semibold uppercase tracking-wider text-charcoal-700">
+                  Choose an option
+                </legend>
+                {serviceOptions.map((option) => (
+                  <label key={option.id} className="flex items-center justify-between gap-3 text-sm text-charcoal-700 cursor-pointer">
+                    <span className="flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name={`service-option-${service.id}`}
+                        value={option.id}
+                        checked={selectedOptionId === option.id}
+                        onChange={() => setSelectedOptionId(option.id)}
+                        className="accent-gold-600"
+                      />
+                      {option.name}
+                    </span>
+                    <span className="font-semibold">
+                      {option.priceOnRequest ? 'On request' : `₹${option.price.toLocaleString('en-IN')}`}
+                    </span>
+                  </label>
+                ))}
+              </fieldset>
+            )}
+
             {/* Pricing Box */}
             <div className="p-4 rounded-2xl bg-cream-50 border border-beige-200 flex items-center justify-between">
               <div>
-                <span className="text-xs text-charcoal-500 uppercase tracking-wider block">Investment</span>
+                <span className="text-xs text-charcoal-500 uppercase tracking-wider block">Menu Price</span>
                 <span className="font-serif text-3xl font-bold text-charcoal-900">
-                  ₹{service.price.toLocaleString('en-IN')}
+                  {selectedService.priceOnRequest ? 'On request' : `₹${selectedService.price.toLocaleString('en-IN')}`}
                 </span>
-                <span className="text-[11px] text-charcoal-500 block">Inclusive of all organic consumables</span>
+                <span className="text-[11px] text-charcoal-500 block">
+                  {selectedService.priceOnRequest
+                    ? 'No price was listed in the supplied menu.'
+                    : selectedService.selectedOption
+                      ? `Price for ${selectedService.selectedOption.name}`
+                      : 'Price as listed in the salon menu'}
+                </span>
               </div>
-              <Badge variant="Active" size="sm">Available Today</Badge>
+              <Badge variant="Active" size="sm">{selectedService.priceOnRequest ? 'Ask for Price' : 'Listed Price'}</Badge>
             </div>
 
             {/* Booking CTA Button */}
             <div className="space-y-3 pt-2">
-              <Link to={`/book-appointment?serviceId=${service.id}`} className="block">
-                <Button variant="gold" size="lg" className="w-full shadow-gold" icon={Calendar}>
-                  Book Appointment Now
-                </Button>
-              </Link>
+              {selectedService.priceOnRequest ? (
+                <Link to="/contact" className="block">
+                  <Button variant="gold" size="lg" className="w-full shadow-gold">
+                    Ask About This Service
+                  </Button>
+                </Link>
+              ) : (
+                <Link to={`/book-appointment?serviceId=${service.id}&variantId=${selectedOptionId}`} className="block">
+                  <Button variant="gold" size="lg" className="w-full shadow-gold" icon={Calendar}>
+                    Book Appointment Now
+                  </Button>
+                </Link>
+              )}
               <p className="text-center text-[11px] text-charcoal-500">
-                Instant confirmation • Free cancellation up to 4 hours before slot
+                Send an appointment request for this service.
               </p>
             </div>
 
-            {/* Key Service Highlights */}
-            <div className="border-t border-beige-200/80 pt-5 space-y-3">
-              <h4 className="text-xs font-bold text-charcoal-800 uppercase tracking-wider">
-                Experience Highlights:
-              </h4>
-              <ul className="space-y-2 text-xs text-charcoal-700">
-                <li className="flex items-center gap-2">
-                  <CheckCircle size={14} className="text-gold-600 shrink-0" />
-                  <span>Personalized 1-on-1 skin / hair diagnostic consultation</span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <CheckCircle size={14} className="text-gold-600 shrink-0" />
-                  <span>Cruelty-free dermatologically tested formulations</span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <CheckCircle size={14} className="text-gold-600 shrink-0" />
-                  <span>Complimentary herbal beverage & relaxation lounge access</span>
-                </li>
-              </ul>
-            </div>
           </div>
         </div>
 
         {/* Benefits & What is Included Sections */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-16 pt-12 border-t border-beige-200/80">
-          {/* Benefits */}
-          <div className="bg-cream-50/70 p-8 rounded-3xl border border-beige-200">
-            <h3 className="font-serif text-2xl font-bold text-charcoal-900 mb-4 flex items-center gap-2">
-              <Sparkles size={20} className="text-gold-600" /> Key Clinical & Aesthetic Benefits
-            </h3>
-            <ul className="space-y-3">
-              {(service.benefits || []).map((benefit, idx) => (
-                <li key={idx} className="flex items-start gap-3 text-sm text-charcoal-700">
-                  <span className="w-5 h-5 rounded-full bg-gold-200 text-gold-800 flex items-center justify-center shrink-0 mt-0.5 text-xs font-bold">
-                    ✓
-                  </span>
-                  <span className="leading-snug">{benefit}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
+        {(service.benefits?.length > 0 || service.included?.length > 0) && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-16 pt-12 border-t border-beige-200/80">
+            {service.benefits?.length > 0 && (
+              <div className="bg-cream-50/70 p-8 rounded-3xl border border-beige-200">
+                <h3 className="font-serif text-2xl font-bold text-charcoal-900 mb-4 flex items-center gap-2">
+                  <Sparkles size={20} className="text-gold-600" /> Service Information
+                </h3>
+                <ul className="space-y-3">
+                  {service.benefits.map((benefit, idx) => (
+                    <li key={idx} className="flex items-start gap-3 text-sm text-charcoal-700">
+                      <span className="w-5 h-5 rounded-full bg-gold-200 text-gold-800 flex items-center justify-center shrink-0 mt-0.5 text-xs font-bold">
+                        ✓
+                      </span>
+                      <span className="leading-snug">{benefit}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
-          {/* What is Included */}
-          <div className="bg-white p-8 rounded-3xl border border-beige-200 shadow-subtle">
-            <h3 className="font-serif text-2xl font-bold text-charcoal-900 mb-4 flex items-center gap-2">
-              <CheckCircle size={20} className="text-gold-600" /> What Is Included in This Session
-            </h3>
-            <ul className="space-y-3">
-              {(service.included || []).map((item, idx) => (
-                <li key={idx} className="flex items-start gap-3 text-sm text-charcoal-700">
-                  <span className="w-5 h-5 rounded-full bg-beige-200 text-charcoal-800 flex items-center justify-center shrink-0 mt-0.5 text-xs font-bold">
-                    {idx + 1}
-                  </span>
-                  <span className="leading-snug">{item}</span>
-                </li>
-              ))}
-            </ul>
+            {service.included?.length > 0 && (
+              <div className="bg-white p-8 rounded-3xl border border-beige-200 shadow-subtle">
+                <h3 className="font-serif text-2xl font-bold text-charcoal-900 mb-4 flex items-center gap-2">
+                  <CheckCircle size={20} className="text-gold-600" /> Session Details
+                </h3>
+                <ul className="space-y-3">
+                  {service.included.map((item, idx) => (
+                    <li key={idx} className="flex items-start gap-3 text-sm text-charcoal-700">
+                      <span className="w-5 h-5 rounded-full bg-beige-200 text-charcoal-800 flex items-center justify-center shrink-0 mt-0.5 text-xs font-bold">
+                        {idx + 1}
+                      </span>
+                      <span className="leading-snug">{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
-        </div>
+        )}
 
         {/* Available Stylists Section */}
         {assignedStaff.length > 0 && (

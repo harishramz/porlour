@@ -4,6 +4,7 @@ import { getAppointmentById, cancelAppointment } from '../../services/api';
 import { useToast } from '../../context/ToastContext';
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
+import { getPaymentMethodLabel } from '../../utils/payment';
 import { Modal } from '../../components/Modal';
 import { Loading } from '../../components/Loading';
 import {
@@ -156,9 +157,9 @@ export const AppointmentDetails = () => {
             </span>
             <p className="font-serif text-lg font-bold text-charcoal-900 flex items-center gap-2">
               <MapPin size={16} className="text-gold-600" />
-              Aura Luxe Sanctuary
+              Her Glow Home Salon
             </p>
-            <p className="text-xs text-charcoal-600">Race Course, Coimbatore</p>
+            <p className="text-xs text-charcoal-600">2J7C+VPR Bengaluru, Karnataka</p>
           </div>
         </div>
 
@@ -187,7 +188,10 @@ export const AppointmentDetails = () => {
             <span className="text-base font-serif">₹{appointment.price.toLocaleString('en-IN')}</span>
           </div>
           <p className="text-[11px] text-charcoal-400 italic pt-1">
-            Payment will be settled on-site following treatment completion.
+            Payment method: {getPaymentMethodLabel(appointment.paymentMethod)}.
+            {appointment.paymentMethod === 'online'
+              ? ` Payment status: ${appointment.paymentStatus === 'captured' ? 'Captured' : 'Pending verification'}.`
+              : ' Payment will be settled at the salon following treatment completion.'}
           </p>
         </div>
 

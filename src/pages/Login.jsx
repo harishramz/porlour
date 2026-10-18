@@ -151,7 +151,7 @@ export const Login = () => {
                 Welcome Back
               </span>
               <h2 className="font-serif text-3xl font-bold text-charcoal-900">
-                Sign In to Aura Luxe
+                Sign In to Her Glow
               </h2>
               <p className="text-xs sm:text-sm text-charcoal-600 mt-1">
                 Enter your credentials to access your customer lounge.

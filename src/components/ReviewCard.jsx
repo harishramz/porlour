@@ -1,5 +1,6 @@
 import React from 'react';
 import { Star, ShieldCheck } from './icons';
+import { DEFAULT_PROFILE_IMAGE, getCustomerProfileImage } from '../utils/profileImage';
 
 export const ReviewCard = ({ review }) => {
   return (
@@ -32,10 +33,13 @@ export const ReviewCard = ({ review }) => {
       {/* Author & Service attribution footer */}
       <div className="pt-4 border-t border-beige-200/80 flex items-center gap-3">
         <img
-          src={review.avatar}
+          src={getCustomerProfileImage(review.avatar)}
           alt={review.customerName}
           className="w-11 h-11 rounded-full object-cover border border-gold-300 shadow-sm shrink-0"
           loading="lazy"
+          onError={(event) => {
+            event.currentTarget.src = DEFAULT_PROFILE_IMAGE;
+          }}
         />
         <div className="min-w-0">
           <h4 className="font-semibold text-charcoal-900 text-sm truncate">

@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { getCustomerAvatar } from '../utils/profileImage';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL?.trim();
 const supabasePublishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY?.trim();
@@ -20,9 +21,12 @@ export const profileToUser = (profile) => ({
   email: profile.email || '',
   phone: profile.phone || '',
   dob: profile.date_of_birth || '',
-  avatar: profile.avatar_url || profile.avatar || '',
+  avatar: profile.role === 'customer'
+    ? getCustomerAvatar(profile.avatar_url || profile.avatar)
+    : profile.avatar_url || profile.avatar || '',
   address: profile.address || '',
   preferences: profile.preferences || {},
+  isVip: Boolean(profile.is_vip),
   role: profile.role || 'customer',
   isAuthenticated: true
 });
@@ -39,7 +43,7 @@ export const getAuthenticatedProfile = async (authenticatedUser = null) => {
 
   const loadProfile = () => supabase
     .from('profiles')
-    .select('id, email, full_name, phone, date_of_birth, avatar_url, address, preferences, role')
+    .select('id, email, full_name, phone, date_of_birth, avatar_url, address, preferences, is_vip, role')
     .eq('id', user.id)
     .single();
 

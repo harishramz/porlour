@@ -11,6 +11,7 @@ import { Button } from '../../components/Button';
 import { Modal } from '../../components/Modal';
 import { Loading } from '../../components/Loading';
 import { ImageField } from '../../components/ImageField';
+import { DEFAULT_PROFILE_IMAGE } from '../../utils/profileImage';
 import {
   Users,
   Plus,
@@ -46,7 +47,7 @@ export const AdminStaff = () => {
     role: 'Senior Stylist',
     specialization: '',
     experience: '5+ Years Experience',
-    avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=400&q=80',
+    avatar: '',
     status: 'Active',
     workingDays: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
     workingHours: '10:00 AM - 07:00 PM'
@@ -84,7 +85,7 @@ export const AdminStaff = () => {
       role: staff.role,
       specialization: staff.specialization,
       experience: staff.experience,
-      avatar: staff.avatar,
+      avatar: staff.avatar || '',
       status: staff.status || 'Active',
       workingDays: staff.workingDays || ['Monday', 'Tuesday', 'Wednesday'],
       workingHours: staff.workingHours || '10:00 AM - 07:00 PM'
@@ -167,18 +168,18 @@ export const AdminStaff = () => {
               <div className="flex items-start justify-between gap-3 mb-4">
                 <div className="flex items-center gap-3.5">
                   <img
-                    src={member.avatar}
+                    src={member.avatar || DEFAULT_PROFILE_IMAGE}
                     alt={member.name}
                     className="w-14 h-14 rounded-full object-cover border-2 border-gold-300 shadow-sm"
+                    onError={(event) => {
+                      event.currentTarget.src = DEFAULT_PROFILE_IMAGE;
+                    }}
                   />
                   <div>
                     <h3 className="font-serif font-bold text-lg text-charcoal-900 leading-tight">
                       {member.name}
                     </h3>
                     <p className="text-xs text-gold-700 font-medium">{member.role}</p>
-                    <span className="text-[11px] text-charcoal-400 block mt-0.5">
-                      ★ {member.rating || 5.0} ({member.reviewsCount || 0} reviews)
-                    </span>
                   </div>
                 </div>
                 <Badge variant={member.status || 'Active'}>{member.status || 'Active'}</Badge>
@@ -314,7 +315,8 @@ export const AdminStaff = () => {
                 folder="staff"
                 value={formData.avatar}
                 onChange={(avatar) => setFormData({ ...formData, avatar })}
-                required
+                defaultValue={DEFAULT_PROFILE_IMAGE}
+                allowRemove
               />
             </div>
 

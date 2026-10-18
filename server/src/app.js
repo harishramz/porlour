@@ -18,6 +18,7 @@ app.use(cors({
 }));
 app.use(express.json({ limit: '1mb' }));
 app.use('/api', rateLimit({ windowMs: 15 * 60 * 1000, limit: 300 }));
+app.use('/api/payments', rateLimit({ windowMs: 15 * 60 * 1000, limit: 20, message: { error: 'Too many payment requests. Please try again later.' } }));
 app.use('/api', apiRouter);
 app.use(notFound);
 app.use(errorHandler);

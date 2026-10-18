@@ -1,22 +1,28 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { getCustomers, getAppointments } from '../../services/api';
+import { createCustomer, deleteCustomer, getCustomers, getAppointments, setCustomerVipStatus } from '../../services/api';
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
 import { Modal } from '../../components/Modal';
 import { Loading } from '../../components/Loading';
+import { useToast } from '../../context/ToastContext';
 import {
   Users,
   Search,
   Eye,
+  Plus,
+  Trash2,
   Calendar,
   Sparkles,
   DollarSign,
   Phone,
   Mail,
-  MapPin
+  MapPin,
+  Star
 } from '../../components/icons';
+import { DEFAULT_PROFILE_IMAGE, getCustomerProfileImage } from '../../utils/profileImage';
 
 export const AdminCustomers = () => {
+  const { addToast } = useToast();
   const [customers, setCustomers] = useState([]);
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -25,6 +31,10 @@ export const AdminCustomers = () => {
 
   // Customer Detail Modal
   const [selectedCustomer, setSelectedCustomer] = useState(null);
+  const [addModalOpen, setAddModalOpen] = useState(false);
+  const [deleteModalCustomer, setDeleteModalCustomer] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [customerForm, setCustomerForm] = useState({ name: '', email: '', phone: '', isVip: false });
 
   useEffect(() => {
     const fetchData = async () => {
@@ -47,8 +57,8 @@ export const AdminCustomers = () => {
         c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         c.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
         c.phone.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesStatus =
-        statusFilter === 'All' || c.status.toLowerCase() === statusFilter.toLowerCase();
+      const matchesStatus = statusFilter === 'All' ||
+        (statusFilter === 'VIP Customer' ? c.isVip : c.status.toLowerCase() === statusFilter.toLowerCase());
       return matchesSearch && matchesStatus;
     });
   }, [customers, searchQuery, statusFilter]);
@@ -62,19 +72,85 @@ export const AdminCustomers = () => {
     ? appointments.filter((a) => a.customerEmail === selectedCustomer.email || a.customerName === selectedCustomer.name)
     : [];
 
+  const handleAddCustomer = async (event) => {
+    event.preventDefault();
+    setSubmitting(true);
+    try {
+      const customer = await createCustomer(customerForm);
+      setCustomers((current) => [customer, ...current]);
+      setCustomerForm({ name: '', email: '', phone: '', isVip: false });
+      setAddModalOpen(false);
+      addToast(
+        `Customer ${customer.name} added${customer.invitationSent ? '. An invitation email has been sent.' : '.'}`,
+        'success'
+      );
+    } catch (error) {
+      console.error('Failed to add customer', error);
+      addToast(error.message || 'Failed to add customer.', 'error');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleToggleVip = async (customer) => {
+    const nextIsVip = !customer.isVip;
+    setSubmitting(true);
+    try {
+      await setCustomerVipStatus(customer.id, nextIsVip);
+      setCustomers((current) => current.map((record) => (
+        record.id === customer.id ? { ...record, isVip: nextIsVip } : record
+      )));
+      if (selectedCustomer?.id === customer.id) {
+        setSelectedCustomer((current) => ({ ...current, isVip: nextIsVip }));
+      }
+      addToast(`${customer.name} ${nextIsVip ? 'marked as' : 'removed as'} a VIP customer.`, 'success');
+    } catch (error) {
+      console.error('Failed to update VIP customer status', error);
+      addToast(error.message || 'Failed to update VIP customer status.', 'error');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDeleteCustomer = async () => {
+    if (!deleteModalCustomer) return;
+    setSubmitting(true);
+    try {
+      await deleteCustomer(deleteModalCustomer.id);
+      setCustomers((current) => current.filter((customer) => customer.id !== deleteModalCustomer.id));
+      setAppointments((current) => current.filter((appointment) => (
+        appointment.customerId !== deleteModalCustomer.id &&
+        appointment.customerEmail !== deleteModalCustomer.email
+      )));
+      if (selectedCustomer?.id === deleteModalCustomer.id) setSelectedCustomer(null);
+      addToast(`${deleteModalCustomer.name} and their appointment history were deleted.`, 'info');
+      setDeleteModalCustomer(null);
+    } catch (error) {
+      console.error('Failed to delete customer', error);
+      addToast(error.message || 'Failed to delete customer.', 'error');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <span className="text-xs uppercase tracking-[0.25em] text-gold-700 font-semibold block mb-1">
-          Clientele Database
-        </span>
-        <h1 className="font-serif text-3xl font-bold text-charcoal-900">
-          Customer Directory & Loyalty
-        </h1>
-        <p className="text-xs text-charcoal-500 mt-0.5">
-          Review guest spending, history, beauty preferences, and tier status.
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <span className="text-xs uppercase tracking-[0.25em] text-gold-700 font-semibold block mb-1">
+            Clientele Database
+          </span>
+          <h1 className="font-serif text-3xl font-bold text-charcoal-900">
+            Customer Directory & Loyalty
+          </h1>
+          <p className="text-xs text-charcoal-500 mt-0.5">
+            Review guest spending, history, beauty preferences, and tier status.
+          </p>
+        </div>
+        <Button variant="gold" icon={Plus} onClick={() => setAddModalOpen(true)}>
+          Add Customer
+        </Button>
       </div>
 
       {/* Filter and Search Bar */}
@@ -91,7 +167,7 @@ export const AdminCustomers = () => {
         </div>
 
         <div className="flex items-center gap-2">
-          {['All', 'VIP Customer', 'Bridal Elite', 'Active'].map((st) => (
+          {['All', 'VIP Customer', 'Active'].map((st) => (
             <button
               key={st}
               onClick={() => setStatusFilter(st)}
@@ -128,9 +204,12 @@ export const AdminCustomers = () => {
                   <td className="py-3.5 px-4">
                     <div className="flex items-center gap-3">
                       <img
-                        src={cust.avatar}
+                        src={getCustomerProfileImage(cust.avatar)}
                         alt={cust.name}
                         className="w-10 h-10 rounded-full object-cover border border-gold-300 shadow-xs shrink-0"
+                        onError={(event) => {
+                          event.currentTarget.src = DEFAULT_PROFILE_IMAGE;
+                        }}
                       />
                       <div>
                         <p className="font-semibold text-charcoal-900">{cust.name}</p>
@@ -152,7 +231,9 @@ export const AdminCustomers = () => {
                     {cust.lastVisit}
                   </td>
                   <td className="py-3.5 px-4">
-                    <Badge variant="gold" size="sm">{cust.status}</Badge>
+                    {cust.isVip
+                      ? <Badge variant="vip" size="sm">VIP Customer</Badge>
+                      : <Badge variant="gold" size="sm">{cust.status}</Badge>}
                   </td>
                   <td className="py-3.5 px-4 text-right whitespace-nowrap">
                     <Button
@@ -163,13 +244,126 @@ export const AdminCustomers = () => {
                     >
                       Dossier
                     </Button>
+                    <Button
+                      variant={cust.isVip ? 'gold' : 'secondary'}
+                      size="sm"
+                      icon={Star}
+                      className="ml-2"
+                      disabled={submitting}
+                      onClick={() => handleToggleVip(cust)}
+                    >
+                      {cust.isVip ? 'Remove VIP' : 'Add VIP'}
+                    </Button>
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      icon={Trash2}
+                      className="ml-2"
+                      onClick={() => setDeleteModalCustomer(cust)}
+                    >
+                      Delete
+                    </Button>
                   </td>
                 </tr>
               ))}
+              {filteredCustomers.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="py-10 text-center text-sm text-charcoal-500">
+                    No customers match your search.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
       </div>
+
+      <Modal
+        isOpen={addModalOpen}
+        onClose={() => !submitting && setAddModalOpen(false)}
+        title="Add Customer"
+        subtitle="Add contact details to the customer directory."
+        footer={
+          <>
+            <Button variant="secondary" disabled={submitting} onClick={() => setAddModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="gold" type="submit" form="add-customer-form" loading={submitting}>
+              Add Customer
+            </Button>
+          </>
+        }
+      >
+        <form id="add-customer-form" className="space-y-4" onSubmit={handleAddCustomer}>
+          <label className="block text-xs font-semibold text-charcoal-700">
+            Full name
+            <input
+              required
+              maxLength={120}
+              autoComplete="name"
+              value={customerForm.name}
+              onChange={(event) => setCustomerForm((form) => ({ ...form, name: event.target.value }))}
+              className="mt-1 w-full rounded-xl border border-beige-300 px-3 py-2.5 text-sm font-normal focus:outline-none focus:ring-2 focus:ring-gold-400"
+            />
+          </label>
+          <label className="flex items-center gap-2 text-xs font-semibold text-charcoal-700">
+            <input
+              type="checkbox"
+              checked={customerForm.isVip}
+              onChange={(event) => setCustomerForm((form) => ({ ...form, isVip: event.target.checked }))}
+              className="h-4 w-4 accent-amber-600"
+            />
+            Mark this customer as VIP
+          </label>
+          <label className="block text-xs font-semibold text-charcoal-700">
+            Email address
+            <input
+              required
+              type="email"
+              maxLength={254}
+              autoComplete="email"
+              value={customerForm.email}
+              onChange={(event) => setCustomerForm((form) => ({ ...form, email: event.target.value }))}
+              className="mt-1 w-full rounded-xl border border-beige-300 px-3 py-2.5 text-sm font-normal focus:outline-none focus:ring-2 focus:ring-gold-400"
+            />
+          </label>
+          <label className="block text-xs font-semibold text-charcoal-700">
+            Phone number
+            <input
+              type="tel"
+              maxLength={40}
+              autoComplete="tel"
+              value={customerForm.phone}
+              onChange={(event) => setCustomerForm((form) => ({ ...form, phone: event.target.value }))}
+              className="mt-1 w-full rounded-xl border border-beige-300 px-3 py-2.5 text-sm font-normal focus:outline-none focus:ring-2 focus:ring-gold-400"
+            />
+          </label>
+          <p className="text-xs text-charcoal-500">
+            Live accounts receive an email invitation so the customer can set up account access.
+          </p>
+        </form>
+      </Modal>
+
+      <Modal
+        isOpen={!!deleteModalCustomer}
+        onClose={() => !submitting && setDeleteModalCustomer(null)}
+        title="Delete Customer?"
+        subtitle={deleteModalCustomer?.name}
+        footer={
+          <>
+            <Button variant="secondary" disabled={submitting} onClick={() => setDeleteModalCustomer(null)}>
+              Cancel
+            </Button>
+            <Button variant="danger" loading={submitting} onClick={handleDeleteCustomer}>
+              Delete Customer
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-charcoal-600">
+          This permanently deletes the customer account and all associated appointment history. This action cannot be undone.
+        </p>
+      </Modal>
 
       {/* Customer Details Modal */}
       {selectedCustomer && (
@@ -177,7 +371,7 @@ export const AdminCustomers = () => {
           isOpen={!!selectedCustomer}
           onClose={() => setSelectedCustomer(null)}
           title={`Guest Profile: ${selectedCustomer.name}`}
-          subtitle={`Tier: ${selectedCustomer.status} • Total Spend: ₹${selectedCustomer.totalSpending.toLocaleString('en-IN')}`}
+          subtitle={`${selectedCustomer.isVip ? 'VIP Customer • ' : ''}Status: ${selectedCustomer.status} • Total Spend: ₹${selectedCustomer.totalSpending.toLocaleString('en-IN')}`}
           maxWidth="max-w-2xl"
           footer={
             <Button variant="secondary" onClick={() => setSelectedCustomer(null)}>
@@ -189,9 +383,12 @@ export const AdminCustomers = () => {
             {/* Header info */}
             <div className="p-4 rounded-xl bg-cream-50 border border-beige-200 flex items-center gap-4">
               <img
-                src={selectedCustomer.avatar}
+                src={getCustomerProfileImage(selectedCustomer.avatar)}
                 alt={selectedCustomer.name}
                 className="w-16 h-16 rounded-full object-cover border-2 border-gold-400"
+                onError={(event) => {
+                  event.currentTarget.src = DEFAULT_PROFILE_IMAGE;
+                }}
               />
               <div className="space-y-0.5">
                 <h4 className="font-serif text-xl font-bold text-charcoal-900">{selectedCustomer.name}</h4>

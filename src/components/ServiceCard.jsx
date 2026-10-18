@@ -1,15 +1,20 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useFavorites } from '../context/FavoritesContext';
 import { useToast } from '../context/ToastContext';
-import { Star, Clock, Heart, ArrowRight } from './icons';
+import { Clock, Heart, ArrowRight } from './icons';
 import { Button } from './Button';
 import { Badge } from './Badge';
+import { getServiceOptions, selectServiceOption } from '../utils/serviceOptions';
 
 export const ServiceCard = ({ service }) => {
   const { isFavorite, toggleFavorite } = useFavorites();
   const { addToast } = useToast();
   const navigate = useNavigate();
+  const options = getServiceOptions(service);
+  const [selectedOptionId, setSelectedOptionId] = useState(options[0]?.id);
+  const selectedService = selectServiceOption(service, selectedOptionId);
+  const hasVariants = Array.isArray(service.variants) && service.variants.length > 0;
 
   const isFav = isFavorite(service.id);
 
@@ -26,7 +31,7 @@ export const ServiceCard = ({ service }) => {
   const handleBookNow = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    navigate(`/book-appointment?serviceId=${service.id}`);
+    navigate(`/book-appointment?serviceId=${service.id}&variantId=${selectedOptionId}`);
   };
 
   return (
@@ -66,13 +71,8 @@ export const ServiceCard = ({ service }) => {
           <Heart size={16} fill={isFav ? 'currentColor' : 'none'} />
         </button>
 
-        {/* Price & Rating Overlay in Image */}
+        {/* Price & Duration Overlay in Image */}
         <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between text-white">
-          <div className="flex items-center gap-1.5 bg-charcoal-900/80 backdrop-blur-md px-2.5 py-1 rounded-full text-xs border border-white/10">
-            <Star size={13} className="text-gold-400 fill-gold-400" />
-            <span className="font-semibold text-white">{service.rating}</span>
-            <span className="text-charcoal-300 text-[11px]">({service.reviewsCount})</span>
-          </div>
           <div className="flex items-center gap-1 text-xs text-white/90 bg-charcoal-900/80 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/10">
             <Clock size={12} className="text-gold-400" />
             <span>{service.duration}</span>
@@ -92,12 +92,40 @@ export const ServiceCard = ({ service }) => {
           {service.shortDescription}
         </p>
 
+        {hasVariants && (
+          <fieldset className="mb-4 space-y-2">
+            <legend className="text-[11px] text-charcoal-500 uppercase tracking-wider mb-2">Choose an option</legend>
+            {options.map((option) => (
+              <label key={option.id} className="flex items-center justify-between gap-2 text-xs text-charcoal-700 cursor-pointer">
+                <span className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name={`service-option-${service.id}`}
+                    value={option.id}
+                    checked={selectedOptionId === option.id}
+                    onChange={() => setSelectedOptionId(option.id)}
+                    className="accent-gold-600"
+                  />
+                  {option.name}
+                </span>
+                <span className="font-semibold">
+                  {option.priceOnRequest ? 'On request' : `₹${option.price.toLocaleString('en-IN')}`}
+                </span>
+              </label>
+            ))}
+          </fieldset>
+        )}
+
         {/* Price and Action Footer */}
         <div className="pt-3 border-t border-beige-200/80 flex items-center justify-between gap-3 mt-auto">
           <div>
-            <span className="text-[11px] text-charcoal-500 uppercase tracking-wider block">Starting At</span>
+            <span className="text-[11px] text-charcoal-500 uppercase tracking-wider block">
+              {hasVariants ? `Price${selectedService.selectedOption ? ` — ${selectedService.selectedOption.name}` : ''}` : 'Price'}
+            </span>
             <span className="text-lg sm:text-xl font-bold font-serif text-charcoal-900">
-              ₹{service.price.toLocaleString('en-IN')}
+              {selectedService.priceOnRequest
+                ? 'On request'
+                : `₹${selectedService.price.toLocaleString('en-IN')}`}
             </span>
           </div>
 
@@ -109,14 +137,20 @@ export const ServiceCard = ({ service }) => {
             >
               <ArrowRight size={14} />
             </Link>
-            <Button
-              onClick={handleBookNow}
-              variant="primary"
-              size="sm"
-              className="rounded-full"
-            >
-              Book Now
-            </Button>
+            {selectedService.priceOnRequest ? (
+              <Button onClick={() => navigate('/contact')} variant="secondary" size="sm" className="rounded-full">
+                Ask Price
+              </Button>
+            ) : (
+              <Button
+                onClick={handleBookNow}
+                variant="primary"
+                size="sm"
+                className="rounded-full"
+              >
+                Book Now
+              </Button>
+            )}
           </div>
         </div>
       </div>

@@ -8,6 +8,26 @@ import { Loading } from '../../components/Loading';
 import { ImageField } from '../../components/ImageField';
 import { Tag, Plus, Edit3, Trash2, CheckCircle, Sparkles } from '../../components/icons';
 
+const toDateInputValue = (value) => {
+  if (!value || value.toLowerCase() === 'ongoing') return '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  const legacyDate = value.match(/^(\d{1,2}) ([A-Za-z]+) (\d{4})$/);
+  if (!legacyDate) return '';
+  const parsed = new Date(`${legacyDate[2]} ${legacyDate[1]}, ${legacyDate[3]} 12:00:00`);
+  if (Number.isNaN(parsed.getTime())) return '';
+  return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, '0')}-${String(parsed.getDate()).padStart(2, '0')}`;
+};
+
+const formatOfferDate = (value) => {
+  if (!value || value.toLowerCase() === 'ongoing') return 'Ongoing';
+  const date = toDateInputValue(value);
+  return date ? new Date(`${date}T12:00:00`).toLocaleDateString() : value;
+};
+
+const getDefaultOfferExpiryDate = () => {
+  return `${new Date().getFullYear() + 1}-12-31`;
+};
+
 export const AdminOffers = () => {
   const { addToast } = useToast();
   const [offers, setOffers] = useState([]);
@@ -23,7 +43,8 @@ export const AdminOffers = () => {
     tagline: '',
     originalPrice: 5000,
     discountedPrice: 3500,
-    validUntil: '31 December 2026',
+    validUntil: getDefaultOfferExpiryDate(),
+    ongoing: false,
     image: 'https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&w=800&q=80',
     description: '',
     inclusionsStr: '24K Facial, Foot Spa, Hair Wash',
@@ -62,7 +83,8 @@ export const AdminOffers = () => {
       tagline: offer.tagline || '',
       originalPrice: offer.originalPrice,
       discountedPrice: offer.discountedPrice,
-      validUntil: offer.validUntil || '31 December 2026',
+      validUntil: toDateInputValue(offer.validUntil),
+      ongoing: offer.validUntil?.toLowerCase() === 'ongoing',
       image: offer.image,
       description: offer.description || '',
       inclusionsStr: (offer.inclusions || []).join(', '),
@@ -81,7 +103,7 @@ export const AdminOffers = () => {
         tagline: formData.tagline,
         originalPrice: Number(formData.originalPrice),
         discountedPrice: Number(formData.discountedPrice),
-        validUntil: formData.validUntil,
+        validUntil: formData.ongoing ? 'Ongoing' : formData.validUntil,
         image: formData.image,
         description: formData.description,
         inclusions: formData.inclusionsStr.split(',').map((s) => s.trim()).filter(Boolean),
@@ -188,7 +210,7 @@ export const AdminOffers = () => {
 
             <div className="p-5 pt-3 border-t border-beige-100 flex items-center justify-between">
               <span className="text-[11px] text-charcoal-500">
-                Expires: {offer.validUntil}
+                Expires: {formatOfferDate(offer.validUntil)}
               </span>
               <div className="flex items-center gap-1.5">
                 <button
@@ -289,12 +311,27 @@ export const AdminOffers = () => {
                 Valid Until
               </label>
               <input
-                type="text"
+                type="date"
+                required={!formData.ongoing}
+                disabled={formData.ongoing}
                 value={formData.validUntil}
                 onChange={(e) => setFormData({ ...formData, validUntil: e.target.value })}
                 className="w-full text-xs sm:text-sm p-3 rounded-xl border border-beige-300 focus:outline-none focus:ring-2 focus:ring-gold-400"
               />
             </div>
+            <label className="flex items-center gap-2 self-end pb-3 text-xs text-charcoal-700">
+              <input
+                type="checkbox"
+                checked={formData.ongoing}
+                onChange={(event) => setFormData({
+                  ...formData,
+                  ongoing: event.target.checked,
+                  validUntil: event.target.checked ? '' : formData.validUntil || getDefaultOfferExpiryDate()
+                })}
+                className="h-4 w-4 accent-gold-600"
+              />
+              No expiry
+            </label>
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wider text-charcoal-700 mb-1">
                 Status

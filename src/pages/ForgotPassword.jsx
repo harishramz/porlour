@@ -12,6 +12,7 @@ export const ForgotPassword = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const returnTo = searchParams.get('returnTo') === '/admin/login' ? '/admin/login' : '/login';
+  const isAdminSetup = searchParams.get('setup') === 'admin' && returnTo === '/admin/login';
   const [email, setEmail] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -78,11 +79,15 @@ export const ForgotPassword = () => {
                 Account Recovery
               </span>
               <h2 className="font-serif text-3xl font-bold text-charcoal-900">
-                {isResetMode ? 'Choose a New Password' : 'Forgot Password?'}
+                {isResetMode
+                  ? (isAdminSetup ? 'Set Your Admin Password' : 'Choose a New Password')
+                  : 'Forgot Password?'}
               </h2>
               <p className="text-xs sm:text-sm text-charcoal-600 mt-2 leading-relaxed">
                 {isResetMode
-                  ? 'Enter and confirm your new password to secure your account.'
+                  ? (isAdminSetup
+                    ? 'Choose a password to activate your administrator account.'
+                    : 'Enter and confirm your new password to secure your account.')
                   : 'Provide your registered email address and we will send you a secure link to reset your credentials.'}
               </p>
             </div>
@@ -137,7 +142,7 @@ export const ForgotPassword = () => {
                 loading={loading}
                 className="w-full shadow-gold"
               >
-                {isResetMode ? 'Update Password' : 'Send Reset Link'}
+                {isResetMode ? (isAdminSetup ? 'Set Admin Password' : 'Update Password') : 'Send Reset Link'}
               </Button>
             </form>
 

@@ -14,7 +14,6 @@ import {
   DollarSign,
   Users,
   Clock,
-  TrendingUp,
   CheckCircle,
   X,
   Eye,
@@ -27,6 +26,7 @@ export const AdminDashboard = () => {
   const [reports, setReports] = useState(null);
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
 
   const fetchDashboard = async () => {
     try {
@@ -38,6 +38,7 @@ export const AdminDashboard = () => {
       setAppointments(aptData);
     } catch (err) {
       console.error('Failed to load admin dashboard', err);
+      setLoadError(err.message || 'Unable to load database dashboard information.');
     } finally {
       setLoading(false);
     }
@@ -58,12 +59,21 @@ export const AdminDashboard = () => {
     }
   };
 
-  if (loading || !reports) {
+  if (loading) {
     return <Loading text="Aggregating real-time salon operations..." />;
   }
+  if (loadError || !reports) {
+    return <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">{loadError || 'Dashboard information is unavailable.'}</p>;
+  }
 
-  // Filter Today's Appointments (or recent list of active appointments)
-  const todayAppointments = appointments.slice(0, 6);
+  const todayAppointments = appointments
+    .filter((appointment) => appointment.date === reports.summary.todayKey)
+    .slice(0, 6);
+  const maximumDailyAppointments = Math.max(1, ...reports.weeklyTrends.map((day) => day.appointments));
+  const maximumServiceValue = Math.max(1, ...reports.topServices.map((service) => service.completedValue));
+  const peakDay = reports.weeklyTrends.reduce((peak, day) =>
+    day.appointments > peak.appointments ? day : peak,
+  reports.weeklyTrends[0]);
 
   return (
     <div className="space-y-8">
@@ -78,9 +88,7 @@ export const AdminDashboard = () => {
             <p className="font-serif text-3xl font-bold text-charcoal-900 mt-1">
               {reports.summary.todayAppointments}
             </p>
-            <span className="text-[11px] text-emerald-600 font-semibold flex items-center gap-1 mt-1">
-              <TrendingUp size={12} /> +15% vs yesterday
-            </span>
+            <span className="text-[11px] text-charcoal-500 block mt-1">From appointment records</span>
           </div>
           <div className="w-12 h-12 rounded-2xl bg-cream-100 text-gold-600 flex items-center justify-center">
             <Calendar size={22} />
@@ -96,27 +104,23 @@ export const AdminDashboard = () => {
             <p className="font-serif text-3xl font-bold text-charcoal-900 mt-1">
               {reports.summary.totalCustomers}
             </p>
-            <span className="text-[11px] text-emerald-600 font-semibold flex items-center gap-1 mt-1">
-              <TrendingUp size={12} /> +12 new this month
-            </span>
+            <span className="text-[11px] text-charcoal-500 block mt-1">Customer accounts in the database</span>
           </div>
           <div className="w-12 h-12 rounded-2xl bg-cream-100 text-gold-600 flex items-center justify-center">
             <Users size={22} />
           </div>
         </div>
 
-        {/* Metric 3: Monthly Revenue */}
+        {/* Metric 3: Monthly completed appointment value */}
         <div className="bg-white p-6 rounded-2xl border border-beige-200 shadow-subtle flex items-center justify-between">
           <div>
             <span className="text-xs font-semibold uppercase tracking-wider text-charcoal-500">
-              Monthly Revenue
+              Monthly Completed Appointment Value
             </span>
             <p className="font-serif text-3xl font-bold text-charcoal-900 mt-1">
-              ₹{reports.summary.monthlyRevenue.toLocaleString('en-IN')}
+              ₹{reports.summary.monthlyCompletedValue.toLocaleString('en-IN')}
             </p>
-            <span className="text-[11px] text-emerald-600 font-semibold flex items-center gap-1 mt-1">
-              <TrendingUp size={12} /> +8.4% target pacing
-            </span>
+            <span className="text-[11px] text-charcoal-500 block mt-1">Completed bookings; not payment records</span>
           </div>
           <div className="w-12 h-12 rounded-2xl bg-cream-100 text-gold-600 flex items-center justify-center">
             <DollarSign size={22} />
@@ -152,15 +156,14 @@ export const AdminDashboard = () => {
               <p className="text-xs text-charcoal-500">Daily booking volume over the current week</p>
             </div>
             <span className="text-xs font-semibold text-gold-700 bg-cream-100 px-3 py-1 rounded-full border border-gold-200">
-              Peak: Saturday
+              {peakDay?.appointments ? `Busiest: ${peakDay.day}` : 'No bookings this week'}
             </span>
           </div>
 
           {/* SVG Bar Chart */}
           <div className="h-56 pt-6 flex items-end justify-between gap-3 sm:gap-6 border-b border-beige-200 pb-2">
             {reports.weeklyTrends.map((d, i) => {
-              const maxVal = 35;
-              const heightPct = Math.round((d.appointments / maxVal) * 100);
+              const heightPct = Math.round((d.appointments / maximumDailyAppointments) * 100);
               return (
                 <div key={i} className="flex-1 flex flex-col items-center gap-2 group h-full justify-end">
                   <span className="text-[10px] font-bold text-charcoal-600 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -169,16 +172,12 @@ export const AdminDashboard = () => {
                   <div
                     className="w-full max-w-[36px] bg-gradient-to-t from-charcoal-900 to-charcoal-700 rounded-t-lg group-hover:from-gold-600 group-hover:to-gold-500 transition-all cursor-pointer"
                     style={{ height: `${heightPct}%` }}
-                    title={`${d.day}: ${d.appointments} appointments (₹${d.revenue})`}
+                    title={`${d.day}: ${d.appointments} appointments; ₹${d.completedValue.toLocaleString('en-IN')} completed appointment value`}
                   />
                   <span className="text-[11px] font-semibold text-charcoal-500 mt-1">{d.day}</span>
                 </div>
               );
             })}
-          </div>
-          <div className="flex items-center justify-between text-xs text-charcoal-500 pt-1">
-            <span>Weekday Avg: 16 slots/day</span>
-            <span>Weekend Avg: 30 slots/day</span>
           </div>
         </div>
 
@@ -187,22 +186,24 @@ export const AdminDashboard = () => {
           <div className="flex items-center justify-between">
             <div>
               <h3 className="font-serif text-xl font-bold text-charcoal-900">
-                Top Revenue Services
+                Most Booked Completed Services
               </h3>
-              <p className="text-xs text-charcoal-500">Highest grossing salon rituals</p>
+              <p className="text-xs text-charcoal-500">Based on completed appointments in the database</p>
             </div>
           </div>
 
           <div className="space-y-4 pt-2">
+            {reports.topServices.length === 0 && (
+              <p className="text-sm text-charcoal-500">No completed appointments are recorded yet.</p>
+            )}
             {reports.topServices.map((srv, idx) => {
-              const maxRev = 700000;
-              const barWidth = Math.round((srv.revenue / maxRev) * 100);
+              const barWidth = Math.round((srv.completedValue / maximumServiceValue) * 100);
               return (
                 <div key={idx} className="space-y-1">
                   <div className="flex items-center justify-between text-xs font-medium">
                     <span className="text-charcoal-800 truncate font-semibold">{srv.name}</span>
                     <span className="text-charcoal-500 font-mono text-[11px] shrink-0">
-                      ₹{(srv.revenue / 1000).toFixed(0)}k ({srv.bookings})
+                      ₹{srv.completedValue.toLocaleString('en-IN')} ({srv.bookings})
                     </span>
                   </div>
                   <div className="w-full h-2 rounded-full bg-beige-100 overflow-hidden">
@@ -226,7 +227,7 @@ export const AdminDashboard = () => {
               Today's Appointments Roster
             </h3>
             <p className="text-xs text-charcoal-500 mt-0.5">
-              Live schedule of appointments booked at Aura Luxe
+              Live schedule of appointments booked at Her Glow
             </p>
           </div>
           <Link to="/admin/appointments">
@@ -250,6 +251,13 @@ export const AdminDashboard = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-beige-100 text-charcoal-700">
+              {todayAppointments.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="py-8 px-4 text-center text-sm text-charcoal-500">
+                    No appointments are recorded for today.
+                  </td>
+                </tr>
+              )}
               {todayAppointments.map((apt) => (
                 <tr key={apt.id} className="hover:bg-beige-50/60 transition-colors">
                   <td className="py-3.5 px-4 font-medium text-charcoal-900">

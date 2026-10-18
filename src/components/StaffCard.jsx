@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Star, Award, Calendar, Scissors, Sparkles } from './icons';
+import { Award, Calendar, Scissors, Sparkles } from './icons';
 import { Button } from './Button';
 
 export const StaffCard = ({ staff }) => {
@@ -35,17 +35,14 @@ export const StaffCard = ({ staff }) => {
           {staff.role}
         </p>
 
-        {/* Rating and Experience Badges */}
+        {/* Experience Badge */}
         <div className="flex items-center gap-2 mb-4 flex-wrap justify-center">
-          <div className="inline-flex items-center gap-1 bg-cream-100 text-charcoal-800 text-xs px-2.5 py-1 rounded-full border border-beige-200">
-            <Star size={13} className="text-gold-500 fill-gold-500" />
-            <span className="font-semibold">{staff.rating}</span>
-            <span className="text-charcoal-400">({staff.reviewsCount})</span>
-          </div>
-          <div className="inline-flex items-center gap-1 bg-cream-100 text-charcoal-800 text-xs px-2.5 py-1 rounded-full border border-beige-200">
+          {staff.experience && (
+            <div className="inline-flex items-center gap-1 bg-cream-100 text-charcoal-800 text-xs px-2.5 py-1 rounded-full border border-beige-200">
             <Award size={13} className="text-gold-600" />
             <span>{staff.experience}</span>
-          </div>
+            </div>
+          )}
         </div>
       </div>
 

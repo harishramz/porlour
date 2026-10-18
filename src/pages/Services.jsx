@@ -5,6 +5,7 @@ import { ServiceCard } from '../components/ServiceCard';
 import { Loading } from '../components/Loading';
 import { EmptyState } from '../components/EmptyState';
 import { Search, Filter, Sparkles, Scissors, RefreshCw } from '../components/icons';
+import { getServiceOptions, getServicePrice } from '../utils/serviceOptions';
 
 export const Services = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -14,10 +15,10 @@ export const Services = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState(initialCategory);
-  const [priceRange, setPriceRange] = useState(15000);
-  const [sortBy, setSortBy] = useState('popularity'); // popularity, price-asc, price-desc, rating
+  const [priceRange, setPriceRange] = useState(2500);
+  const [sortBy, setSortBy] = useState('default');
 
-  const categories = ['All', 'Hair', 'Skin', 'Nails', 'Makeup', 'Beauty'];
+  const categories = ['All', 'Beauty', 'Skin', 'Nails', 'Hair'];
 
   useEffect(() => {
     const fetchServices = async () => {
@@ -51,15 +52,17 @@ export const Services = () => {
         const matchesSearch =
           service.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
           service.shortDescription.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          service.category.toLowerCase().includes(searchQuery.toLowerCase());
-        const matchesPrice = service.price <= priceRange;
+          service.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          service.variants?.some((option) => option.name.toLowerCase().includes(searchQuery.toLowerCase()));
+        const prices = getServiceOptions(service)
+          .map((option) => option.price)
+          .filter((price) => Number.isFinite(price));
+        const matchesPrice = service.priceOnRequest || prices.length === 0 || prices.some((price) => price <= priceRange);
         return matchesCategory && matchesSearch && matchesPrice;
       })
       .sort((a, b) => {
-        if (sortBy === 'popularity') return (b.reviewsCount || 0) - (a.reviewsCount || 0);
-        if (sortBy === 'rating') return (b.rating || 0) - (a.rating || 0);
-        if (sortBy === 'price-asc') return a.price - b.price;
-        if (sortBy === 'price-desc') return b.price - a.price;
+        if (sortBy === 'price-asc') return (getServicePrice(a) ?? Infinity) - (getServicePrice(b) ?? Infinity);
+        if (sortBy === 'price-desc') return (getServicePrice(b) ?? -Infinity) - (getServicePrice(a) ?? -Infinity);
         return 0;
       });
   }, [services, selectedCategory, searchQuery, priceRange, sortBy]);
@@ -73,13 +76,13 @@ export const Services = () => {
       {/* Header Banner */}
       <div className="text-center max-w-3xl mx-auto mb-12">
         <span className="text-xs uppercase tracking-[0.25em] text-gold-700 font-semibold flex items-center justify-center gap-1.5 mb-2">
-          <Sparkles size={14} /> Full Catalogue
+          <Sparkles size={14} /> Her Glow Home Salon
         </span>
         <h1 className="font-serif text-4xl sm:text-5xl font-light text-charcoal-900 leading-tight">
-          Exceptional Treatments & Rituals
+          Beauty Services & Price List
         </h1>
         <p className="text-sm sm:text-base text-charcoal-600 mt-3 leading-relaxed">
-          Explore our complete collection of bespoke hair styling, derma therapies, bridal artistry, and therapeutic nail care.
+          Browse the services and prices from the Her Glow Home Salon menu.
         </p>
       </div>
 
@@ -117,8 +120,7 @@ export const Services = () => {
               onChange={(e) => setSortBy(e.target.value)}
               className="text-xs sm:text-sm py-2 px-3.5 rounded-full border border-beige-300 bg-white text-charcoal-800 focus:outline-none focus:ring-2 focus:ring-gold-400 font-medium cursor-pointer"
             >
-              <option value="popularity">Most Popular</option>
-              <option value="rating">Highest Rated</option>
+              <option value="default">As listed</option>
               <option value="price-asc">Price: Low to High</option>
               <option value="price-desc">Price: High to Low</option>
             </select>
@@ -149,9 +151,9 @@ export const Services = () => {
             <span className="text-xs text-charcoal-500 whitespace-nowrap">Max Price:</span>
             <input
               type="range"
-              min="500"
-              max="15000"
-              step="500"
+              min="0"
+              max="2500"
+              step="50"
               value={priceRange}
               onChange={(e) => setPriceRange(Number(e.target.value))}
               className="accent-gold-600 w-32 sm:w-44 cursor-pointer"
@@ -169,12 +171,12 @@ export const Services = () => {
           Showing <strong className="text-charcoal-900">{filteredServices.length}</strong> of{' '}
           {services.length} services
         </span>
-        {(searchQuery || selectedCategory !== 'All' || priceRange < 15000) && (
+        {(searchQuery || selectedCategory !== 'All' || priceRange < 2500) && (
           <button
             onClick={() => {
               setSearchQuery('');
               handleCategorySelect('All');
-              setPriceRange(15000);
+              setPriceRange(2500);
               setSortBy('popularity');
             }}
             className="text-gold-700 hover:underline flex items-center gap-1"
@@ -193,7 +195,7 @@ export const Services = () => {
           onAction={() => {
             setSearchQuery('');
             handleCategorySelect('All');
-            setPriceRange(15000);
+            setPriceRange(2500);
           }}
         />
       ) : (
@@ -203,6 +205,7 @@ export const Services = () => {
           ))}
         </div>
       )}
+
     </div>
   );
 };

@@ -4,6 +4,7 @@ import { Calendar, Clock, User, Scissors, Eye, X, AlertCircle } from './icons';
 import { Badge } from './Badge';
 import { Button } from './Button';
 import { Modal } from './Modal';
+import { getPaymentMethodLabel } from '../utils/payment';
 
 export const AppointmentCard = ({ appointment, onCancelSuccess }) => {
   const [showCancelModal, setShowCancelModal] = useState(false);
@@ -65,6 +66,10 @@ export const AppointmentCard = ({ appointment, onCancelSuccess }) => {
               <span>{appointment.time}</span>
             </span>
           </div>
+          <p className="text-xs text-charcoal-500">
+            Payment method: <strong className="text-charcoal-700">{getPaymentMethodLabel(appointment.paymentMethod)}</strong>
+            {appointment.paymentMethod === 'online' && ' (payment not yet processed)'}
+          </p>
         </div>
 
         {/* Right: Price & Actions */}

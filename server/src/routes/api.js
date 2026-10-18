@@ -6,6 +6,7 @@ import { appointmentsRouter } from './appointments.js';
 import { createCatalogRouter } from './catalog.js';
 import { profilesRouter } from './profiles.js';
 import { reportsRouter } from './reports.js';
+import { paymentsRouter } from './payments.js';
 
 export const apiRouter = Router();
 
@@ -23,8 +24,9 @@ apiRouter.get('/auth/me', requireSupabase, authenticate, asyncHandler(async (req
 apiRouter.use('/services', createCatalogRouter('salon_services'));
 apiRouter.use('/staff', createCatalogRouter('staff_members'));
 apiRouter.use('/offers', createCatalogRouter('salon_offers'));
-apiRouter.use('/reviews', createCatalogRouter('salon_reviews', { customerCanCreate: true }));
+apiRouter.use('/reviews', createCatalogRouter('salon_reviews', { allowAdminContentWrites: false }));
 apiRouter.use('/gallery', createCatalogRouter('gallery_items'));
 apiRouter.use('/appointments', appointmentsRouter);
 apiRouter.use('/customers', profilesRouter);
 apiRouter.use('/reports', reportsRouter);
+apiRouter.use('/payments', paymentsRouter);

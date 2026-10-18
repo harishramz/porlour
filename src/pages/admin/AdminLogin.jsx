@@ -5,7 +5,6 @@ import { useToast } from '../../context/ToastContext';
 import { Button } from '../../components/Button';
 import { ShieldCheck, Lock, Mail, Sparkles, ArrowRight, ArrowLeft } from '../../components/icons';
 import { supabaseConfigured } from '../../services/supabase';
-import { seedInitialCatalogData } from '../../services/api';
 
 const getAdminSignInMessage = (error) => {
   if (error.message === 'Invalid login credentials') {
@@ -36,7 +35,6 @@ export const AdminLogin = () => {
           await logout();
           throw new Error('This account does not have administrator access.');
         }
-        await seedInitialCatalogData();
       } else {
         loginAsAdmin();
       }
@@ -65,7 +63,7 @@ export const AdminLogin = () => {
           <Sparkles size={24} />
         </div>
         <h2 className="font-serif text-3xl font-bold tracking-widest text-white">
-          AURA LUXE ADMIN
+          HER GLOW ADMIN
         </h2>
         <p className="mt-2 text-xs uppercase tracking-[0.25em] text-gold-400 font-semibold">
           Operational Management Portal

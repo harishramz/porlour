@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { Button } from '../../components/Button';
 import { Modal } from '../../components/Modal';
 import { ImageField } from '../../components/ImageField';
+import { getAppointments } from '../../services/api';
 import { supabaseConfigured } from '../../services/supabase';
+import { DEFAULT_PROFILE_IMAGE, getCustomerProfileImage } from '../../utils/profileImage';
 import {
   User,
   Mail,
@@ -12,8 +14,7 @@ import {
   Calendar,
   Sparkles,
   Lock,
-  CheckCircle,
-  ShieldCheck
+  CheckCircle
 } from '../../components/icons';
 
 export const CustomerProfile = () => {
@@ -21,19 +22,22 @@ export const CustomerProfile = () => {
   const { addToast } = useToast();
 
   const [formData, setFormData] = useState({
-    name: user?.name || 'Harish Varma',
-    email: user?.email || 'harish.varma@example.com',
+    name: user?.name || '',
+    email: user?.email || '',
     avatar: user?.avatar || '',
-    phone: user?.phone || '+91 98765 43210',
-    dob: user?.dob || '1992-05-14',
-    address: user?.address || '12 Emerald Boulevard, Race Course, Coimbatore',
-    skinType: user?.preferences?.skinType || 'Combination / Sensitive',
-    hairType: user?.preferences?.hairType || 'Wavy, Medium Density',
-    allergies: user?.preferences?.allergies || 'Mild lavender fragrance sensitivity',
-    favoriteBeverage: user?.preferences?.favoriteBeverage || 'Green tea with honey'
+    phone: user?.phone || '',
+    dob: user?.dob || '',
+    address: user?.address || '',
+    skinType: user?.preferences?.skinType || '',
+    hairType: user?.preferences?.hairType || '',
+    allergies: user?.preferences?.allergies || '',
+    favoriteBeverage: user?.preferences?.favoriteBeverage || ''
   });
 
   const [saving, setSaving] = useState(false);
+  const [completedAppointments, setCompletedAppointments] = useState([]);
+  const [appointmentsLoading, setAppointmentsLoading] = useState(true);
+  const [appointmentsError, setAppointmentsError] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [passwordData, setPasswordData] = useState({
     currentPassword: '',
@@ -41,6 +45,34 @@ export const CustomerProfile = () => {
     confirmPassword: ''
   });
   const [passwordSaving, setPasswordSaving] = useState(false);
+
+  useEffect(() => {
+    let isCurrent = true;
+    setAppointmentsLoading(true);
+    setAppointmentsError(false);
+
+    getAppointments(user?.id || 'cust-1')
+      .then((appointments) => {
+        if (!isCurrent) return;
+        setCompletedAppointments(
+          appointments
+            .filter((appointment) => appointment.status === 'Completed')
+            .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+        );
+      })
+      .catch((error) => {
+        console.error('Failed to load completed customer treatments', error);
+        if (!isCurrent) return;
+        setAppointmentsError(true);
+      })
+      .finally(() => {
+        if (isCurrent) setAppointmentsLoading(false);
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [user?.id]);
 
   const handleSave = async (e) => {
     e.preventDefault();
@@ -124,9 +156,12 @@ export const CustomerProfile = () => {
           <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6 pb-6 border-b border-beige-100">
             <div className="relative group">
               <img
-                src={formData.avatar || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80'}
+                src={getCustomerProfileImage(formData.avatar)}
                 alt={formData.name}
                 className="w-24 h-24 rounded-full object-cover border-2 border-gold-400 shadow-premium"
+                onError={(event) => {
+                  event.currentTarget.src = DEFAULT_PROFILE_IMAGE;
+                }}
               />
               <span className="absolute bottom-0 right-0 bg-charcoal-900 text-gold-400 p-1.5 rounded-full border border-gold-400 text-xs shadow-sm">
                 <Sparkles size={12} />
@@ -138,21 +173,49 @@ export const CustomerProfile = () => {
                 {formData.name}
               </h3>
               <p className="text-xs text-charcoal-500 mt-0.5">{formData.email}</p>
-              <div className="mt-3 flex flex-wrap items-center justify-center sm:justify-start gap-2">
-                <span className="text-xs bg-gold-100 text-gold-800 font-semibold px-2.5 py-0.5 rounded-full">
-                  VIP Club Member
+              {user?.isVip && (
+                <span className="mt-2 inline-flex text-[10px] font-semibold uppercase tracking-wider px-2.5 py-1 rounded-full bg-charcoal-900 text-gold-300 border border-gold-500/50">
+                  VIP Customer
                 </span>
-                <span className="text-xs bg-beige-100 text-charcoal-700 px-2.5 py-0.5 rounded-full">
-                  6 Treatments Completed
-                </span>
-              </div>
+              )}
+              <p className="mt-3 text-xs font-semibold text-charcoal-700">
+                {appointmentsLoading
+                  ? 'Loading completed treatments…'
+                  : appointmentsError
+                  ? 'Completed treatment history is unavailable.'
+                  : `${completedAppointments.length} ${completedAppointments.length === 1 ? 'treatment' : 'treatments'} completed`}
+              </p>
             </div>
           </div>
+          {!appointmentsLoading && !appointmentsError && completedAppointments.length > 0 && (
+            <section aria-label="Completed treatments" className="rounded-2xl border border-beige-200 bg-cream-50/60 p-4">
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-charcoal-700 mb-3">
+                Completed treatments
+              </h4>
+              <ul className="space-y-2">
+                {completedAppointments.map((appointment) => (
+                  <li key={appointment.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 text-sm">
+                    <span className="font-medium text-charcoal-800">
+                      {appointment.serviceName || 'Salon treatment'}
+                    </span>
+                    <span className="text-xs text-charcoal-500">
+                      {appointment.date
+                        ? new Date(`${appointment.date}T12:00:00`).toLocaleDateString()
+                        : 'Date unavailable'}
+                      {appointment.staffName ? ` · ${appointment.staffName}` : ''}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
           <ImageField
             label="Profile Photo"
             folder="profile"
             value={formData.avatar}
             onChange={(avatar) => setFormData({ ...formData, avatar })}
+            defaultValue={DEFAULT_PROFILE_IMAGE}
+            allowRemove
           />
 
           {/* Form Fields: Name, Email, Phone, DOB */}

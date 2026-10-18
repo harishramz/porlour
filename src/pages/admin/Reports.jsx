@@ -4,19 +4,14 @@ import { useToast } from '../../context/ToastContext';
 import { Button } from '../../components/Button';
 import { Loading } from '../../components/Loading';
 import {
-  BarChart2,
-  Download,
-  TrendingUp,
-  DollarSign,
-  Users,
-  Award,
-  Sparkles
+  Download
 } from '../../components/icons';
 
 export const AdminReports = () => {
   const { addToast } = useToast();
   const [reports, setReports] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
 
   useEffect(() => {
     const fetchReports = async () => {
@@ -25,6 +20,7 @@ export const AdminReports = () => {
         setReports(data);
       } catch (err) {
         console.error('Failed to load reports', err);
+        setLoadError(err.message || 'Unable to load database reports.');
       } finally {
         setLoading(false);
       }
@@ -36,21 +32,30 @@ export const AdminReports = () => {
     // Generate CSV string
     const csvContent =
       'data:text/csv;charset=utf-8,' +
-      'Month,Revenue (INR),Bookings\n' +
-      reports.monthlyTrends.map((e) => `${e.month},${e.revenue},${e.bookings}`).join('\n');
+      'Month,Completed appointment value (INR),Completed appointments\n' +
+      reports.monthlyTrends.map((entry) => `${entry.month},${entry.completedValue},${entry.completedAppointments}`).join('\n');
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `Aura_Luxe_Financial_Report_${Date.now()}.csv`);
+    link.setAttribute('download', `Her_Glow_Completed_Appointment_Report_${Date.now()}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    addToast('Financial report CSV generated and downloaded.', 'success');
+    addToast('Appointment report CSV generated and downloaded.', 'success');
   };
 
-  if (loading || !reports) {
-    return <Loading text="Synthesizing business analytics & financial ledger..." />;
+  if (loading) {
+    return <Loading text="Loading appointment reports from the database..." />;
   }
+  if (loadError || !reports) {
+    return (
+      <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+        {loadError || 'Business reports are unavailable.'}
+      </p>
+    );
+  }
+
+  const maximumMonthValue = Math.max(1, ...reports.monthlyTrends.map((month) => month.completedValue));
 
   return (
     <div className="space-y-8">
@@ -58,13 +63,13 @@ export const AdminReports = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <span className="text-xs uppercase tracking-[0.25em] text-gold-700 font-semibold block mb-1">
-            Financial Ledger & Analytics
+            Appointment Analytics
           </span>
           <h1 className="font-serif text-3xl font-bold text-charcoal-900">
             Business Reports & Insights
           </h1>
           <p className="text-xs text-charcoal-500 mt-0.5">
-            Evaluate parlour revenue growth, staff commissions, and operational performance.
+            Figures below are calculated from appointment records in the database. Completed service values are not payment records.
           </p>
         </div>
 
@@ -82,79 +87,69 @@ export const AdminReports = () => {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         <div className="bg-white p-6 rounded-2xl border border-beige-200 shadow-subtle">
           <span className="text-xs font-semibold uppercase tracking-wider text-charcoal-500">
-            Gross Revenue (YTD)
+            Completed Appointment Value (All Time)
           </span>
           <p className="font-serif text-3xl font-bold text-charcoal-900 mt-1">
-            ₹{reports.summary.totalRevenue.toLocaleString('en-IN')}
+            ₹{reports.summary.totalCompletedValue.toLocaleString('en-IN')}
           </p>
-          <span className="text-[11px] text-emerald-600 font-semibold flex items-center gap-1 mt-1">
-            <TrendingUp size={12} /> +22.4% YoY growth
-          </span>
+          <span className="text-[11px] text-charcoal-500 mt-1 block">Based on appointments marked completed</span>
         </div>
 
         <div className="bg-white p-6 rounded-2xl border border-beige-200 shadow-subtle">
           <span className="text-xs font-semibold uppercase tracking-wider text-charcoal-500">
-            Avg. Ticket Value
+            Average Completed Appointment Value
           </span>
           <p className="font-serif text-3xl font-bold text-charcoal-900 mt-1">
-            ₹2,850
+            ₹{Math.round(reports.summary.averageCompletedValue).toLocaleString('en-IN')}
           </p>
-          <span className="text-[11px] text-emerald-600 font-semibold flex items-center gap-1 mt-1">
-            <TrendingUp size={12} /> Boosted by bridal packages
-          </span>
+          <span className="text-[11px] text-charcoal-500 mt-1 block">Completed appointment value per visit</span>
         </div>
 
         <div className="bg-white p-6 rounded-2xl border border-beige-200 shadow-subtle">
           <span className="text-xs font-semibold uppercase tracking-wider text-charcoal-500">
-            Client Retention
+            Repeat Customer Rate
           </span>
           <p className="font-serif text-3xl font-bold text-charcoal-900 mt-1">
-            78.4%
+            {reports.summary.repeatCustomerRate.toFixed(1)}%
           </p>
-          <span className="text-[11px] text-emerald-600 font-semibold flex items-center gap-1 mt-1">
-            Industry benchmark: 60%
-          </span>
+          <span className="text-[11px] text-charcoal-500 mt-1 block">Among customers with completed appointments</span>
         </div>
 
         <div className="bg-white p-6 rounded-2xl border border-beige-200 shadow-subtle">
           <span className="text-xs font-semibold uppercase tracking-wider text-charcoal-500">
-            Completed Rituals
+            Completed Appointments
           </span>
           <p className="font-serif text-3xl font-bold text-charcoal-900 mt-1">
             {reports.summary.completedAppointments}
           </p>
-          <span className="text-[11px] text-charcoal-400 block mt-1">98.2% positive rating</span>
+          <span className="text-[11px] text-charcoal-500 block mt-1">All time in the database</span>
         </div>
       </div>
 
-      {/* Monthly Revenue Progression Chart */}
+      {/* Monthly Completed Appointment Value */}
       <div className="bg-white p-6 sm:p-8 rounded-2xl border border-beige-200 shadow-subtle space-y-6">
         <div className="flex items-center justify-between">
           <div>
             <h3 className="font-serif text-xl font-bold text-charcoal-900">
-              Monthly Revenue Progression (2026)
+              Monthly Completed Appointment Value
             </h3>
-            <p className="text-xs text-charcoal-500">Trailing 6-month fiscal trajectory in INR</p>
+            <p className="text-xs text-charcoal-500">Value of completed appointments in INR; not a payment ledger</p>
           </div>
-          <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">
-            Peak Month: October (Projected)
-          </span>
         </div>
 
         {/* SVG Area / Line Chart with coordinates */}
         <div className="h-64 flex items-end justify-between gap-4 border-b border-beige-200 pb-4 pt-6">
           {reports.monthlyTrends.map((m, idx) => {
-            const max = 110000;
-            const heightPct = Math.round((m.revenue / max) * 100);
+            const heightPct = Math.round((m.completedValue / maximumMonthValue) * 100);
             return (
               <div key={idx} className="flex-1 flex flex-col items-center justify-end h-full gap-2 group">
                 <span className="text-[11px] font-mono font-bold text-charcoal-700">
-                  ₹{(m.revenue / 1000).toFixed(0)}k
+                  ₹{(m.completedValue / 1000).toFixed(0)}k
                 </span>
                 <div
                   className="w-full max-w-[48px] bg-gradient-to-t from-charcoal-950 via-charcoal-800 to-gold-500 rounded-t-xl group-hover:brightness-110 transition-all cursor-pointer shadow-xs"
                   style={{ height: `${heightPct}%` }}
-                  title={`${m.month}: ₹${m.revenue.toLocaleString()} (${m.bookings} bookings)`}
+                  title={`${m.month}: ₹${m.completedValue.toLocaleString()} (${m.completedAppointments} completed appointments)`}
                 />
                 <span className="text-xs font-semibold text-charcoal-600 mt-1">{m.month}</span>
               </div>
@@ -169,12 +164,15 @@ export const AdminReports = () => {
         <div className="bg-white p-6 rounded-2xl border border-beige-200 shadow-subtle space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="font-serif text-xl font-bold text-charcoal-900">
-              Staff Performance Ranking
+              Completed Appointments by Staff
             </h3>
-            <span className="text-xs text-charcoal-400">By Gross Contribution</span>
+            <span className="text-xs text-charcoal-400">Completed appointment value</span>
           </div>
 
           <div className="space-y-3">
+            {reports.staffPerformance.length === 0 && (
+              <p className="text-sm text-charcoal-500">No completed appointments are recorded yet.</p>
+            )}
             {reports.staffPerformance.map((st, idx) => (
               <div
                 key={idx}
@@ -186,13 +184,13 @@ export const AdminReports = () => {
                   </span>
                   <div>
                     <h4 className="font-bold text-charcoal-900 text-sm">{st.name}</h4>
-                    <p className="text-xs text-charcoal-500">{st.role} • ★ {st.rating}</p>
+                    <p className="text-xs text-charcoal-500">{st.role}</p>
                   </div>
                 </div>
 
                 <div className="text-right">
                   <span className="font-serif font-bold text-charcoal-900 text-sm block">
-                    ₹{st.revenue.toLocaleString('en-IN')}
+                    ₹{st.completedValue.toLocaleString('en-IN')}
                   </span>
                   <span className="text-[11px] text-charcoal-500">{st.bookings} sessions</span>
                 </div>
@@ -201,16 +199,19 @@ export const AdminReports = () => {
           </div>
         </div>
 
-        {/* Highest Margin Packages */}
+        {/* Most Booked Completed Services */}
         <div className="bg-white p-6 rounded-2xl border border-beige-200 shadow-subtle space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="font-serif text-xl font-bold text-charcoal-900">
-              High Margin Services
+              Most Booked Completed Services
             </h3>
-            <span className="text-xs text-charcoal-400">Volume & Revenue</span>
+            <span className="text-xs text-charcoal-400">Completed visits & appointment value</span>
           </div>
 
           <div className="space-y-3">
+            {reports.topServices.length === 0 && (
+              <p className="text-sm text-charcoal-500">No completed appointments are recorded yet.</p>
+            )}
             {reports.topServices.map((srv, idx) => (
               <div
                 key={idx}
@@ -218,15 +219,15 @@ export const AdminReports = () => {
               >
                 <div>
                   <h4 className="font-bold text-charcoal-900 text-sm">{srv.name}</h4>
-                  <span className="text-xs text-charcoal-500">{srv.bookings} total reservations</span>
+                  <span className="text-xs text-charcoal-500">{srv.bookings} completed appointments</span>
                 </div>
 
                 <div className="text-right">
                   <span className="font-serif font-bold text-charcoal-900 text-sm block">
-                    ₹{srv.revenue.toLocaleString('en-IN')}
+                    ₹{srv.completedValue.toLocaleString('en-IN')}
                   </span>
                   <span className="text-[11px] text-emerald-700 font-semibold bg-emerald-100/60 px-2 py-0.5 rounded">
-                    High Demand
+                    Completed
                   </span>
                 </div>
               </div>

@@ -50,7 +50,7 @@ export const Register = () => {
           navigate(`/login?confirmation=sent&email=${encodeURIComponent(formData.email)}`);
           return;
         }
-        addToast(`Welcome to Aura Luxe, ${formData.fullName}!`, 'success');
+        addToast(`Welcome to Her Glow, ${formData.fullName}!`, 'success');
         navigate(successPath);
         return;
       }
@@ -61,14 +61,14 @@ export const Register = () => {
         name: formData.fullName,
         email: formData.email,
         phone: formData.phone,
-        avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
+        avatar: '',
         role: 'customer',
         totalAppointments: 0,
         totalSpending: 0,
         status: 'New Member'
       };
       login(newCustomer);
-      addToast(`Welcome to Aura Luxe, ${formData.fullName}!`, 'success');
+      addToast(`Welcome to Her Glow, ${formData.fullName}!`, 'success');
       navigate('/dashboard');
     } catch (error) {
       const message = error.message?.toLowerCase() || '';
@@ -145,7 +145,7 @@ export const Register = () => {
                   required
                   value={formData.phone}
                   onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                  placeholder="+91 98765 43210"
+                  placeholder="Enter your phone number"
                   className="w-full text-xs sm:text-sm pl-10 pr-3 py-2.5 rounded-xl border border-beige-300 focus:outline-none focus:ring-2 focus:ring-gold-400 bg-cream-50/30"
                 />
               </div>
@@ -202,7 +202,7 @@ export const Register = () => {
               <Link to="/about" className="text-gold-700 font-semibold underline">
                 Terms & Conditions
               </Link>{' '}
-              and privacy policy of Aura Luxe Parlour.
+              and privacy policy of Her Glow Home Salon.
             </label>
           </div>
 

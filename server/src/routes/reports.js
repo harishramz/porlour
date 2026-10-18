@@ -6,6 +6,17 @@ import { requireSupabase, supabase } from '../lib/supabase.js';
 export const reportsRouter = Router();
 reportsRouter.use(requireSupabase, authenticate, requireRole('admin'));
 
+const dateKeyInSalonTimezone = (date) => {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(date);
+  const part = (type) => parts.find((entry) => entry.type === type)?.value;
+  return `${part('year')}-${part('month')}-${part('day')}`;
+};
+
 reportsRouter.get('/', asyncHandler(async (req, res) => {
   const [{ data: appointments, error: appointmentsError }, { data: profiles, error: profilesError }] = await Promise.all([
     supabase.from('appointments').select('customer_id, date, status, data'),
@@ -16,73 +27,83 @@ reportsRouter.get('/', asyncHandler(async (req, res) => {
 
   const records = appointments || [];
   const completed = records.filter((appointment) => appointment.status === 'Completed');
-  const today = new Date();
-  const todayKey = today.toISOString().slice(0, 10);
+  const todayKey = dateKeyInSalonTimezone(new Date());
   const monthKey = todayKey.slice(0, 7);
+  const valueOf = (appointment) => Math.max(0, Number(appointment.data?.price) || 0);
+  const totalCompletedValue = completed.reduce((sum, appointment) => sum + valueOf(appointment), 0);
+  const [year, month] = monthKey.split('-').map(Number);
   const monthKeys = Array.from({ length: 6 }, (_, index) => {
-    const month = new Date(today.getFullYear(), today.getMonth() - 5 + index, 1);
+    const date = new Date(Date.UTC(year, month - 1 - (5 - index), 1));
+    const key = date.toISOString().slice(0, 7);
     return {
-      key: `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, '0')}`,
-      month: month.toLocaleString('en-US', { month: 'short' })
+      key,
+      month: date.toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' })
     };
   });
   const monthlyTrends = monthKeys.map(({ key, month }) => {
-    const monthAppointments = records.filter((appointment) => appointment.date?.startsWith(key));
+    const monthAppointments = completed.filter((appointment) => appointment.date?.startsWith(key));
     return {
       month,
-      revenue: monthAppointments
-        .filter((appointment) => appointment.status === 'Completed')
-        .reduce((sum, appointment) => sum + Number(appointment.data.price || 0), 0),
-      bookings: monthAppointments.length
+      completedValue: monthAppointments.reduce((sum, appointment) => sum + valueOf(appointment), 0),
+      completedAppointments: monthAppointments.length
     };
   });
-
   const weeklyTrends = Array.from({ length: 7 }, (_, index) => {
-    const date = new Date(today);
-    date.setDate(today.getDate() - (6 - index));
+    const date = new Date(`${todayKey}T00:00:00Z`);
+    date.setUTCDate(date.getUTCDate() - (6 - index));
     const key = date.toISOString().slice(0, 10);
     const daily = records.filter((appointment) => appointment.date === key);
     return {
-      day: date.toLocaleString('en-US', { weekday: 'short' }),
+      day: date.toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' }),
       appointments: daily.length,
-      revenue: daily
+      completedValue: daily
         .filter((appointment) => appointment.status === 'Completed')
-        .reduce((sum, appointment) => sum + Number(appointment.data.price || 0), 0)
+        .reduce((sum, appointment) => sum + valueOf(appointment), 0)
     };
   });
 
   const serviceTotals = new Map();
   const staffTotals = new Map();
-  for (const appointment of records) {
-    if (appointment.status === 'Cancelled') continue;
-    const price = Number(appointment.data.price || 0);
-    const serviceName = appointment.data.serviceName || 'Salon service';
-    const service = serviceTotals.get(serviceName) || { name: serviceName, bookings: 0, revenue: 0 };
+  const completedByCustomer = new Map();
+  for (const appointment of completed) {
+    const value = valueOf(appointment);
+    const serviceName = appointment.data?.serviceName || 'Unspecified service';
+    const service = serviceTotals.get(serviceName) || { name: serviceName, bookings: 0, completedValue: 0 };
     service.bookings += 1;
-    service.revenue += price;
+    service.completedValue += value;
     serviceTotals.set(serviceName, service);
 
-    const staffName = appointment.data.staffName || 'Unassigned';
+    const staffName = appointment.data?.staffName || 'Unassigned';
     const staff = staffTotals.get(staffName) || {
       name: staffName,
-      role: appointment.data.staffRole || 'Salon professional',
+      role: appointment.data?.staffRole || 'Not specified',
       bookings: 0,
-      revenue: 0,
-      rating: Number(appointment.data.rating || 5)
+      completedValue: 0
     };
     staff.bookings += 1;
-    staff.revenue += price;
+    staff.completedValue += value;
     staffTotals.set(staffName, staff);
+    if (appointment.customer_id) {
+      completedByCustomer.set(
+        appointment.customer_id,
+        (completedByCustomer.get(appointment.customer_id) || 0) + 1
+      );
+    }
   }
 
-  const currentMonthAppointments = records.filter((appointment) => appointment.date?.startsWith(monthKey));
+  const repeatCustomers = [...completedByCustomer.values()].filter((count) => count > 1).length;
   res.json({
     summary: {
-      totalRevenue: completed.reduce((sum, appointment) => sum + Number(appointment.data.price || 0), 0),
-      monthlyRevenue: currentMonthAppointments
-        .filter((appointment) => appointment.status === 'Completed')
-        .reduce((sum, appointment) => sum + Number(appointment.data.price || 0), 0),
+      totalCompletedValue,
+      monthlyCompletedValue: completed
+        .filter((appointment) => appointment.date?.startsWith(monthKey))
+        .reduce((sum, appointment) => sum + valueOf(appointment), 0),
+      averageCompletedValue: completed.length ? totalCompletedValue / completed.length : 0,
+      repeatCustomerRate: completedByCustomer.size
+        ? (repeatCustomers / completedByCustomer.size) * 100
+        : 0,
       totalAppointments: records.length,
+      todayKey,
       todayAppointments: records.filter((appointment) => appointment.date === todayKey).length,
       pendingAppointments: records.filter((appointment) => appointment.status === 'Pending').length,
       confirmedAppointments: records.filter((appointment) => appointment.status === 'Confirmed').length,
@@ -93,6 +114,6 @@ reportsRouter.get('/', asyncHandler(async (req, res) => {
     weeklyTrends,
     monthlyTrends,
     topServices: [...serviceTotals.values()].sort((a, b) => b.bookings - a.bookings).slice(0, 5),
-    staffPerformance: [...staffTotals.values()].sort((a, b) => b.revenue - a.revenue).slice(0, 5)
+    staffPerformance: [...staffTotals.values()].sort((a, b) => b.completedValue - a.completedValue).slice(0, 5)
   });
 }));

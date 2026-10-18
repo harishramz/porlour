@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import {
   getAppointments,
@@ -25,6 +25,25 @@ import {
   Eye,
   Scissors
 } from '../../components/icons';
+import { getPaymentMethodLabel, PAYMENT_METHODS } from '../../utils/payment';
+
+const getTodayDate = () => {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(new Date());
+  const part = (type) => parts.find((item) => item.type === type)?.value;
+  return `${part('year')}-${part('month')}-${part('day')}`;
+};
+
+const getTimeMinutes = (time) => {
+  const match = time?.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (!match) return 0;
+  const hour = Number(match[1]) % 12 + (match[3].toUpperCase() === 'PM' ? 12 : 0);
+  return hour * 60 + Number(match[2]);
+};
 
 export const AdminAppointments = () => {
   const { addToast } = useToast();
@@ -36,6 +55,7 @@ export const AdminAppointments = () => {
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
+  const [dateView, setDateView] = useState('today');
 
   // Manual Add Appointment Modal
   const [addModalOpen, setAddModalOpen] = useState(false);
@@ -44,28 +64,46 @@ export const AdminAppointments = () => {
     customerEmail: '',
     customerPhone: '',
     serviceId: '',
-    staffId: 'staff-1',
-    date: '2026-10-12',
+    staffId: '',
+    paymentMethod: PAYMENT_METHODS.AFTER_TREATMENT,
+    date: getTodayDate(),
     time: '11:00 AM',
     notes: ''
   });
   const [submitting, setSubmitting] = useState(false);
+  const knownAppointmentIds = useRef(null);
+  const [browserNotificationPermission, setBrowserNotificationPermission] = useState(
+    typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'unsupported'
+  );
 
   // View details modal
   const [viewApt, setViewApt] = useState(null);
 
-  const fetchAllAppointments = async () => {
+  const fetchAllAppointments = async ({ announceNew = false } = {}) => {
     try {
       const [aptData, srvData, stData] = await Promise.all([
         getAppointments(),
         getServices(),
         getStaff()
       ]);
+      const newAppointments = knownAppointmentIds.current
+        ? aptData.filter((appointment) => !knownAppointmentIds.current.has(appointment.id))
+        : [];
+      knownAppointmentIds.current = new Set(aptData.map((appointment) => appointment.id));
       setAppointments(aptData);
       setServices(srvData);
       setStaffList(stData);
       if (srvData.length > 0 && !newApt.serviceId) {
         setNewApt((prev) => ({ ...prev, serviceId: srvData[0].id }));
+      }
+      if (announceNew && newAppointments.length > 0) {
+        for (const appointment of newAppointments) {
+          const message = `${appointment.customerName || 'A customer'} booked ${appointment.serviceName || 'a service'} for ${appointment.date} at ${appointment.time}.`;
+          addToast(`New appointment: ${message}`, 'success');
+          if ('Notification' in window && Notification.permission === 'granted') {
+            new Notification('New appointment booked', { body: message });
+          }
+        }
       }
     } catch (err) {
       console.error('Failed to load appointments', err);
@@ -76,7 +114,24 @@ export const AdminAppointments = () => {
 
   useEffect(() => {
     fetchAllAppointments();
+    const poll = window.setInterval(() => fetchAllAppointments({ announceNew: true }), 15000);
+    return () => window.clearInterval(poll);
   }, []);
+
+  const enableBrowserNotifications = async () => {
+    if (!('Notification' in window)) {
+      addToast('This browser does not support notifications. Keep the Appointments page open for in-app alerts.', 'info');
+      return;
+    }
+    const permission = await Notification.requestPermission();
+    setBrowserNotificationPermission(permission);
+    addToast(
+      permission === 'granted'
+        ? 'Browser appointment alerts enabled.'
+        : 'Browser alerts were not enabled. In-app alerts will still appear while this page is open.',
+      permission === 'granted' ? 'success' : 'info'
+    );
+  };
 
   const handleStatusChange = async (aptId, newStatus) => {
     try {
@@ -102,42 +157,74 @@ export const AdminAppointments = () => {
       addToast('Customer Name and Phone are required.', 'error');
       return;
     }
+    const selectedService = services.find((service) => service.id === newApt.serviceId);
+    if (!selectedService) {
+      addToast('Add a service in the service catalog before scheduling an appointment.', 'error');
+      return;
+    }
     setSubmitting(true);
     try {
-      const selectedService = services.find((s) => s.id === newApt.serviceId) || services[0];
-      const selectedStaff = staffList.find((s) => s.id === newApt.staffId) || staffList[0];
+      const selectedStaff = staffList.find((staff) => staff.id === newApt.staffId);
 
-      await createAppointment({
-        customerId: `cust-admin-${Date.now().toString().slice(-4)}`,
+      const appointment = await createAppointment({
+        customerId: null,
         customerName: newApt.customerName,
-        customerEmail: newApt.customerEmail || 'walkin@auraluxe.com',
+        customerEmail: newApt.customerEmail.trim() || undefined,
         customerPhone: newApt.customerPhone,
         serviceId: selectedService.id,
         serviceName: selectedService.name,
         category: selectedService.category,
-        staffId: selectedStaff.id,
-        staffName: selectedStaff.name,
+        staffId: selectedStaff?.id || null,
+        staffName: selectedStaff?.name || 'Any available specialist',
         date: newApt.date,
-        formattedDate: new Date(newApt.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }),
+        formattedDate: new Date(`${newApt.date}T12:00:00`).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }),
         time: newApt.time,
         duration: selectedService.duration,
         price: selectedService.price,
+        paymentMethod: newApt.paymentMethod,
         notes: newApt.notes,
         status: 'Confirmed'
       });
       addToast('Manual appointment created successfully.', 'success');
       setAddModalOpen(false);
+      setNewApt({
+        customerName: '',
+        customerEmail: '',
+        customerPhone: '',
+        serviceId: services[0]?.id || '',
+        staffId: '',
+        paymentMethod: PAYMENT_METHODS.AFTER_TREATMENT,
+        date: getTodayDate(),
+        time: '11:00 AM',
+        notes: ''
+      });
       await fetchAllAppointments();
     } catch (err) {
       console.error('Error creating manual booking', err);
-      addToast('Failed to create appointment.', 'error');
+      addToast(err.message || 'Failed to create appointment.', 'error');
     } finally {
       setSubmitting(false);
     }
   };
 
+  const todayKey = getTodayDate();
+  const dateFilteredAppointments = useMemo(() => {
+    const matchesView = (appointment) => {
+      if (dateView === 'today') return appointment.date === todayKey;
+      return appointment.date < todayKey;
+    };
+    return appointments
+      .filter(matchesView)
+      .sort((first, second) => {
+        const dateOrder = first.date.localeCompare(second.date);
+        const timeOrder = getTimeMinutes(first.time) - getTimeMinutes(second.time);
+        const order = dateOrder || timeOrder;
+        return dateView === 'history' ? -order : order;
+      });
+  }, [appointments, dateView, todayKey]);
+
   const filteredAppointments = useMemo(() => {
-    return appointments.filter((apt) => {
+    return dateFilteredAppointments.filter((apt) => {
       const matchesStatus =
         statusFilter === 'All' || apt.status.toLowerCase() === statusFilter.toLowerCase();
       const matchesSearch =
@@ -147,7 +234,12 @@ export const AdminAppointments = () => {
         apt.id?.toLowerCase().includes(searchQuery.toLowerCase());
       return matchesStatus && matchesSearch;
     });
-  }, [appointments, statusFilter, searchQuery]);
+  }, [dateFilteredAppointments, statusFilter, searchQuery]);
+
+  const appointmentViews = [
+    { id: 'today', label: "Today's Appointments", count: appointments.filter((appointment) => appointment.date === todayKey).length },
+    { id: 'history', label: 'Appointment History', count: appointments.filter((appointment) => appointment.date < todayKey).length }
+  ];
 
   if (loading) {
     return <Loading text="Loading master salon schedule..." />;
@@ -167,7 +259,7 @@ export const AdminAppointments = () => {
             Manage Appointments
           </h1>
           <p className="text-xs text-charcoal-500 mt-0.5">
-            Audit, confirm, reschedule, and manage all parlour bookings.
+            Today’s schedule is shown first. Switch views to see future bookings or past appointment history.
           </p>
         </div>
 
@@ -179,6 +271,38 @@ export const AdminAppointments = () => {
         >
           Book Walk-in / Phone Client
         </Button>
+        <Button
+          variant="secondary"
+          size="md"
+          onClick={enableBrowserNotifications}
+          disabled={browserNotificationPermission === 'granted'}
+        >
+          {browserNotificationPermission === 'granted' ? 'Browser Alerts Enabled' : 'Enable Browser Alerts'}
+        </Button>
+      </div>
+
+      <div className="flex flex-wrap gap-2" role="tablist" aria-label="Appointments by date">
+        {appointmentViews.map((view) => (
+          <button
+            key={view.id}
+            type="button"
+            role="tab"
+            aria-selected={dateView === view.id}
+            onClick={() => setDateView(view.id)}
+            className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-colors ${
+              dateView === view.id
+                ? 'border-charcoal-900 bg-charcoal-900 text-gold-300'
+                : 'border-beige-200 bg-white text-charcoal-700 hover:bg-cream-50'
+            }`}
+          >
+            {view.label}
+            <span className={`rounded-full px-2 py-0.5 text-xs ${
+              dateView === view.id ? 'bg-white/15 text-white' : 'bg-beige-100 text-charcoal-600'
+            }`}>
+              {view.count}
+            </span>
+          </button>
+        ))}
       </div>
 
       {/* Filter and Search Bar */}
@@ -215,6 +339,21 @@ export const AdminAppointments = () => {
 
       {/* Appointments Table */}
       <div className="bg-white rounded-2xl border border-beige-200 shadow-subtle overflow-hidden">
+        <div className="border-b border-beige-200 px-4 py-3">
+          <h2 className="font-semibold text-charcoal-900">
+            {dateView === 'today'
+              ? `Today's Appointments · ${new Intl.DateTimeFormat('en-IN', {
+                  timeZone: 'Asia/Kolkata',
+                  day: 'numeric',
+                  month: 'long',
+                  year: 'numeric'
+                }).format(new Date())}`
+              : 'Appointment History'}
+          </h2>
+          <p className="text-xs text-charcoal-500 mt-0.5">
+            Showing {filteredAppointments.length} appointment{filteredAppointments.length === 1 ? '' : 's'}
+          </p>
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs sm:text-sm">
             <thead>
@@ -226,11 +365,23 @@ export const AdminAppointments = () => {
                 <th className="py-3 px-4 font-semibold">Date</th>
                 <th className="py-3 px-4 font-semibold">Time</th>
                 <th className="py-3 px-4 font-semibold">Amount</th>
+                <th className="py-3 px-4 font-semibold">Payment Method</th>
                 <th className="py-3 px-4 font-semibold">Status</th>
                 <th className="py-3 px-4 font-semibold text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-beige-100 text-charcoal-700">
+              {filteredAppointments.length === 0 && (
+                <tr>
+                  <td colSpan={10} className="px-4 py-12 text-center text-sm text-charcoal-500">
+                    {dateFilteredAppointments.length === 0
+                      ? dateView === 'today'
+                        ? 'No appointments are scheduled for today.'
+                        : 'There is no past appointment history.'
+                      : 'No appointments match the selected search and status filters.'}
+                  </td>
+                </tr>
+              )}
               {filteredAppointments.map((apt) => (
                 <tr key={apt.id} className="hover:bg-beige-50/60 transition-colors">
                   <td className="py-3 px-4 font-mono text-xs font-bold text-charcoal-500 whitespace-nowrap">
@@ -256,6 +407,14 @@ export const AdminAppointments = () => {
                   </td>
                   <td className="py-3 px-4 font-serif font-bold text-charcoal-900 whitespace-nowrap">
                     ₹{apt.price.toLocaleString('en-IN')}
+                  </td>
+                  <td className="py-3 px-4 whitespace-nowrap text-xs">
+                    {getPaymentMethodLabel(apt.paymentMethod)}
+                    {apt.paymentMethod === PAYMENT_METHODS.ONLINE && (
+                      <span className="block text-[10px] text-emerald-700">
+                        {apt.paymentStatus === 'captured' ? 'Captured' : 'Pending'}
+                      </span>
+                    )}
                   </td>
                   <td className="py-3 px-4 whitespace-nowrap">
                     <Badge variant={apt.status}>{apt.status}</Badge>
@@ -347,6 +506,13 @@ export const AdminAppointments = () => {
                 <span className="text-charcoal-500 text-[10px] uppercase block">Scheduled Time</span>
                 <strong className="text-gold-700">{viewApt.time}</strong>
               </div>
+              <div className="p-3 rounded-lg bg-beige-50">
+                <span className="text-charcoal-500 text-[10px] uppercase block">Payment Method</span>
+                <strong className="text-charcoal-900">{getPaymentMethodLabel(viewApt.paymentMethod)}</strong>
+                {viewApt.paymentMethod === PAYMENT_METHODS.ONLINE && (
+                  <span className="block text-[10px] text-amber-700">Payment not processed</span>
+                )}
+              </div>
             </div>
 
             {viewApt.notes && (
@@ -401,6 +567,7 @@ export const AdminAppointments = () => {
                 Select Service
               </label>
               <select
+                required
                 value={newApt.serviceId}
                 onChange={(e) => setNewApt({ ...newApt, serviceId: e.target.value })}
                 className="w-full text-xs sm:text-sm p-3 rounded-xl border border-beige-300 focus:outline-none focus:ring-2 focus:ring-gold-400 bg-white"
@@ -422,6 +589,7 @@ export const AdminAppointments = () => {
                 onChange={(e) => setNewApt({ ...newApt, staffId: e.target.value })}
                 className="w-full text-xs sm:text-sm p-3 rounded-xl border border-beige-300 focus:outline-none focus:ring-2 focus:ring-gold-400 bg-white"
               >
+                <option value="">Any available specialist</option>
                 {staffList.map((st) => (
                   <option key={st.id} value={st.id}>
                     {st.name} ({st.role})
@@ -437,6 +605,7 @@ export const AdminAppointments = () => {
               <input
                 type="date"
                 required
+                min={getTodayDate()}
                 value={newApt.date}
                 onChange={(e) => setNewApt({ ...newApt, date: e.target.value })}
                 className="w-full text-xs sm:text-sm p-3 rounded-xl border border-beige-300 focus:outline-none focus:ring-2 focus:ring-gold-400"
@@ -459,6 +628,19 @@ export const AdminAppointments = () => {
                 <option value="03:00 PM">03:00 PM</option>
                 <option value="04:00 PM">04:00 PM</option>
                 <option value="05:00 PM">05:00 PM</option>
+              </select>
+            </div>
+
+            <div className="sm:col-span-2">
+              <label className="block text-xs font-semibold uppercase tracking-wider text-charcoal-700 mb-1">
+                Payment Method
+              </label>
+              <select
+                value={newApt.paymentMethod}
+                onChange={(event) => setNewApt({ ...newApt, paymentMethod: event.target.value })}
+                className="w-full text-xs sm:text-sm p-3 rounded-xl border border-beige-300 focus:outline-none focus:ring-2 focus:ring-gold-400 bg-white"
+              >
+                <option value={PAYMENT_METHODS.AFTER_TREATMENT}>Pay after treatment</option>
               </select>
             </div>
           </div>

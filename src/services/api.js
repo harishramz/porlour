@@ -6,10 +6,14 @@ import { initialGallery } from '../data/gallery';
 import { initialCustomers } from '../data/customers';
 import { initialAppointments } from '../data/appointments';
 import { profileToUser, supabase, supabaseConfigured } from './supabase';
+import { groupLegacyServiceVariants } from '../utils/serviceOptions';
+import { getCustomerAvatar } from '../utils/profileImage';
+
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '');
 
 // LocalStorage Keys
 const STORAGE_KEYS = {
-  SERVICES: 'aura_luxe_services',
+  SERVICES: 'her_glow_services',
   STAFF: 'aura_luxe_staff',
   OFFERS: 'aura_luxe_offers',
   REVIEWS: 'aura_luxe_reviews',
@@ -53,9 +57,54 @@ const catalogTables = {
   gallery: 'gallery_items'
 };
 
+const productionDataOnly = import.meta.env.PROD;
+
 const visibleCatalogItem = (item) => {
   const status = item.status?.toLowerCase();
   return status !== 'inactive' && status !== 'expired';
+};
+
+const getOfferExpiryDate = (value) => {
+  if (!value || value.toLowerCase() === 'ongoing') return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+
+  const legacyDate = value.match(/^(\d{1,2}) ([A-Za-z]+) (\d{4})$/);
+  if (!legacyDate) return null;
+  const parsed = new Date(`${legacyDate[2]} ${legacyDate[1]}, ${legacyDate[3]} 12:00:00`);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, '0')}-${String(parsed.getDate()).padStart(2, '0')}`;
+};
+
+const filterExpiredOffers = (offers) => {
+  const dateParts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(new Date());
+  const datePart = (type) => dateParts.find((part) => part.type === type)?.value;
+  const todayKey = `${datePart('year')}-${datePart('month')}-${datePart('day')}`;
+  return offers.filter((offer) => {
+    const expiryDate = getOfferExpiryDate(offer.validUntil);
+    return !expiryDate || expiryDate >= todayKey;
+  });
+};
+
+const removeExpiredLocalOffers = (offers) => {
+  const currentOffers = filterExpiredOffers(offers);
+  if (currentOffers.length !== offers.length) setStorageItem(STORAGE_KEYS.OFFERS, currentOffers);
+  return currentOffers;
+};
+
+const getSalonDateKey = (date) => {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(date);
+  const part = (type) => parts.find((entry) => entry.type === type)?.value;
+  return `${part('year')}-${part('month')}-${part('day')}`;
 };
 
 const getCatalogRecords = async (table, fallback, includeInactive = false) => {
@@ -66,12 +115,15 @@ const getCatalogRecords = async (table, fallback, includeInactive = false) => {
     .single();
   if (stateError) {
     if (stateError.code === 'PGRST205' || stateError.code === '42P01') {
+      if (productionDataOnly) {
+        throw new Error('The Supabase salon data schema is missing. Apply server/supabase/schema.sql before publishing.');
+      }
       console.warn('Supabase catalog schema is not installed; showing the bundled catalog until it is configured.');
       return includeInactive ? fallback : fallback.filter(visibleCatalogItem);
     }
     throw stateError;
   }
-  if (!catalogState.initialized) {
+  if (!catalogState.initialized && !productionDataOnly) {
     return includeInactive ? fallback : fallback.filter(visibleCatalogItem);
   }
 
@@ -114,48 +166,9 @@ const updateCatalogRecord = async (table, id, updatedFields) => {
 };
 
 const deleteCatalogRecord = async (table, id) => {
-  const { error } = await supabase.from(table).update({ is_active: false }).eq('id', id);
+  const { error } = await supabase.from(table).delete().eq('id', id);
   if (error) throw error;
   return { success: true, id };
-};
-
-export const seedInitialCatalogData = async () => {
-  if (!supabase) throw new Error('Supabase is not configured.');
-  const { data: catalogState, error: stateError } = await supabase
-    .from('salon_catalog_state')
-    .select('initialized')
-    .eq('id', 'primary')
-    .single();
-  if (stateError) throw stateError;
-  if (catalogState.initialized) return;
-
-  const seedTables = [
-    [catalogTables.services, initialServices],
-    [catalogTables.staff, initialStaff],
-    [catalogTables.offers, initialOffers],
-    [catalogTables.reviews, initialReviews],
-    [catalogTables.gallery, initialGallery]
-  ];
-
-  for (const [table, records] of seedTables) {
-    const { data: existing, error: readError } = await supabase.from(table).select('id').limit(1);
-    if (readError) throw readError;
-    if (existing?.length) continue;
-
-    const rows = records.map((record) => ({
-      id: record.id,
-      data: record,
-      is_active: true
-    }));
-    const { error } = await supabase.from(table).insert(rows);
-    if (error) throw error;
-  }
-
-  const { error } = await supabase
-    .from('salon_catalog_state')
-    .update({ initialized: true })
-    .eq('id', 'primary');
-  if (error) throw error;
 };
 
 export const apiRequest = async (path, { method = 'GET', body, accessToken } = {}) => {
@@ -165,17 +178,26 @@ export const apiRequest = async (path, { method = 'GET', body, accessToken } = {
     token = data.session?.access_token;
   }
 
-  const response = await fetch(`/api${path}`, {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
     method,
     headers: {
       ...(body ? { 'Content-Type': 'application/json' } : {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {})
     },
     ...(body ? { body: JSON.stringify(body) } : {})
+  }).catch((cause) => {
+    const error = new Error('Unable to reach the admin API. Start the Express server and check its Supabase configuration.');
+    error.cause = cause;
+    throw error;
   });
   const result = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const error = new Error(result.error || `API request failed (${response.status}).`);
+    const error = new Error(
+      result.error ||
+      (response.status >= 500
+        ? `Admin API request failed (${response.status}). Check that the Express server is running and configured.`
+        : `API request failed (${response.status}).`)
+    );
     error.status = response.status;
     error.code = result.code;
     throw error;
@@ -183,25 +205,42 @@ export const apiRequest = async (path, { method = 'GET', body, accessToken } = {
   return result;
 };
 
+export const createPaymentOrder = async ({ serviceId, serviceOptionId, serviceVariantIds }) =>
+  apiRequest('/payments/orders', {
+    method: 'POST',
+    body: { serviceId, serviceOptionId, serviceVariantIds }
+  });
+
+export const verifyPayment = async ({ razorpayOrderId, razorpayPaymentId, razorpaySignature }) =>
+  apiRequest('/payments/verify', {
+    method: 'POST',
+    body: { razorpayOrderId, razorpayPaymentId, razorpaySignature }
+  });
+
 // ==========================================
 // SERVICES API (Future: /api/services)
 // ==========================================
 export const getServices = async ({ includeInactive = false } = {}) => {
-  if (supabaseConfigured) return getCatalogRecords(catalogTables.services, initialServices, includeInactive);
+  if (supabaseConfigured) {
+    const services = await getCatalogRecords(catalogTables.services, initialServices, includeInactive);
+    return groupLegacyServiceVariants(services);
+  }
   await delay(150);
   const services = getStorageItem(STORAGE_KEYS.SERVICES, initialServices);
-  return includeInactive ? services : services.filter(visibleCatalogItem);
+  return groupLegacyServiceVariants(includeInactive ? services : services.filter(visibleCatalogItem));
 };
 
 export const getServiceById = async (id) => {
   if (supabaseConfigured) {
-    const service = (await getCatalogRecords(catalogTables.services, initialServices)).find((record) => record.id === id);
+    const service = groupLegacyServiceVariants(
+      await getCatalogRecords(catalogTables.services, initialServices)
+    ).find((record) => record.id === id || record.variantIds?.includes(id));
     if (!service) throw new Error(`Service with ID ${id} not found`);
     return service;
   }
   await delay(100);
-  const services = getStorageItem(STORAGE_KEYS.SERVICES, initialServices);
-  const service = services.find((s) => s.id === id);
+  const services = groupLegacyServiceVariants(getStorageItem(STORAGE_KEYS.SERVICES, initialServices));
+  const service = services.find((s) => s.id === id || s.variantIds?.includes(id));
   if (!service) {
     throw new Error(`Service with ID ${id} not found`);
   }
@@ -211,21 +250,13 @@ export const getServiceById = async (id) => {
 export const createService = async (serviceData) => {
   if (supabaseConfigured) {
     return createCatalogRecord(catalogTables.services, {
-      rating: 5.0,
+      rating: null,
       reviewsCount: 0,
       isPopular: false,
       status: 'Active',
-      benefits: serviceData.benefits || [
-        'Delivered by certified master stylists',
-        'Uses organic cruelty-free luxury formulations',
-        'Noticeable revitalization from first session'
-      ],
-      included: serviceData.included || [
-        'Comprehensive one-on-one consultation',
-        'Custom treatment application',
-        'Post-care recommendations & advice'
-      ],
-      staffIds: serviceData.staffIds || ['staff-1'],
+      benefits: serviceData.benefits || [],
+      included: serviceData.included || [],
+      staffIds: serviceData.staffIds || [],
       ...serviceData
     });
   }
@@ -233,21 +264,13 @@ export const createService = async (serviceData) => {
   const services = getStorageItem(STORAGE_KEYS.SERVICES, initialServices);
   const newService = {
     id: `srv-${Date.now()}`,
-    rating: 5.0,
+    rating: null,
     reviewsCount: 0,
     isPopular: false,
     status: 'Active',
-    benefits: serviceData.benefits || [
-      'Delivered by certified master stylists',
-      'Uses organic cruelty-free luxury formulations',
-      'Noticeable revitalization from first session'
-    ],
-    included: serviceData.included || [
-      'Comprehensive one-on-one consultation',
-      'Custom treatment application',
-      'Post-care recommendations & advice'
-    ],
-    staffIds: serviceData.staffIds || ['staff-1'],
+    benefits: serviceData.benefits || [],
+    included: serviceData.included || [],
+    staffIds: serviceData.staffIds || [],
     ...serviceData
   };
   const updated = [newService, ...services];
@@ -256,21 +279,33 @@ export const createService = async (serviceData) => {
 };
 
 export const updateService = async (id, updatedFields) => {
-  if (supabaseConfigured) return updateCatalogRecord(catalogTables.services, id, updatedFields);
+  const service = (await getServices({ includeInactive: true })).find((item) => item.id === id);
+  const legacyVariantIds = (service?.variantIds || []).filter((variantId) => variantId !== id);
+  if (supabaseConfigured) {
+    const updated = await updateCatalogRecord(catalogTables.services, id, updatedFields);
+    await Promise.all(legacyVariantIds.map((variantId) => deleteCatalogRecord(catalogTables.services, variantId)));
+    return updated;
+  }
   await delay(200);
   const services = getStorageItem(STORAGE_KEYS.SERVICES, initialServices);
   const index = services.findIndex((s) => s.id === id);
   if (index === -1) throw new Error('Service not found');
   services[index] = { ...services[index], ...updatedFields };
-  setStorageItem(STORAGE_KEYS.SERVICES, services);
+  const updatedServices = services.filter((item) => !legacyVariantIds.includes(item.id));
+  setStorageItem(STORAGE_KEYS.SERVICES, updatedServices);
   return services[index];
 };
 
 export const deleteService = async (id) => {
-  if (supabaseConfigured) return deleteCatalogRecord(catalogTables.services, id);
+  const service = (await getServices({ includeInactive: true })).find((item) => item.id === id);
+  const serviceIds = service?.variantIds || [id];
+  if (supabaseConfigured) {
+    await Promise.all(serviceIds.map((serviceId) => deleteCatalogRecord(catalogTables.services, serviceId)));
+    return { success: true, id };
+  }
   await delay(200);
   const services = getStorageItem(STORAGE_KEYS.SERVICES, initialServices);
-  const filtered = services.filter((s) => s.id !== id);
+  const filtered = services.filter((s) => !serviceIds.includes(s.id));
   setStorageItem(STORAGE_KEYS.SERVICES, filtered);
   return { success: true, id };
 };
@@ -422,27 +457,26 @@ export const createAppointment = async (appointmentData) => {
     const { data: { user }, error: userError } = await supabase.auth.getUser();
     if (userError) throw userError;
     if (!user) throw new Error('Sign in before booking an appointment.');
-    const customerId = appointmentData.customerId || user.id;
-    const record = {
-      ...appointmentData,
-      customerId,
-      status: 'Confirmed',
-      createdAt: new Date().toISOString()
-    };
-    const { data, error } = await supabase
-      .from('appointments')
-      .insert({
-        customer_id: customerId,
-        date: appointmentData.date,
-        time: appointmentData.time,
-        staff_id: appointmentData.staffId && appointmentData.staffId !== 'any' ? appointmentData.staffId : null,
-        status: record.status,
-        data: record
-      })
-      .select('*')
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
       .single();
-    if (error) throw error;
-    return serializeAppointment(data);
+    if (profileError) throw profileError;
+    if (appointmentData.customerId === null && profile.role !== 'admin') {
+      throw new Error('Only admins can create unlinked walk-in appointments.');
+    }
+    if (appointmentData.customerId === null && !appointmentData.customerName?.trim()) {
+      throw new Error('Enter the walk-in customer name.');
+    }
+    const requestBody = { ...appointmentData };
+    if (profile.role !== 'admin' || !Object.hasOwn(appointmentData, 'customerId')) {
+      delete requestBody.customerId;
+    }
+    return apiRequest('/appointments', {
+      method: 'POST',
+      body: requestBody
+    });
   }
   await delay(250);
   const appointments = getStorageItem(STORAGE_KEYS.APPOINTMENTS, initialAppointments);
@@ -521,7 +555,7 @@ export const getCustomerProfile = async (customerId = 'cust-1') => {
     if (!user) throw new Error('Sign in to view your customer profile.');
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, email, full_name, phone, date_of_birth, avatar_url, address, preferences, role')
+      .select('id, email, full_name, phone, date_of_birth, avatar_url, address, preferences, is_vip, role')
       .eq('id', user.id)
       .single();
     if (error) throw error;
@@ -530,7 +564,7 @@ export const getCustomerProfile = async (customerId = 'cust-1') => {
   await delay(150);
   const customers = getStorageItem(STORAGE_KEYS.CUSTOMERS, initialCustomers);
   const customer = customers.find((c) => c.id === customerId);
-  return customer || initialCustomers[0];
+  return customer ? { ...customer, avatar: getCustomerAvatar(customer.avatar) } : initialCustomers[0];
 };
 
 export const updateCustomerProfile = async (customerId, updatedData) => {
@@ -538,7 +572,7 @@ export const updateCustomerProfile = async (customerId, updatedData) => {
     const profileUpdates = {
       ...(updatedData.name !== undefined ? { full_name: updatedData.name } : {}),
       ...(updatedData.phone !== undefined ? { phone: updatedData.phone } : {}),
-      ...(updatedData.avatar !== undefined ? { avatar_url: updatedData.avatar } : {}),
+      ...(updatedData.avatar !== undefined ? { avatar_url: updatedData.avatar || null } : {}),
       ...(updatedData.dob !== undefined ? { date_of_birth: updatedData.dob || null } : {}),
       ...(updatedData.address !== undefined ? { address: updatedData.address } : {}),
       ...(updatedData.preferences !== undefined ? { preferences: updatedData.preferences } : {})
@@ -550,7 +584,7 @@ export const updateCustomerProfile = async (customerId, updatedData) => {
       .from('profiles')
       .update(profileUpdates)
       .eq('id', user.id)
-      .select('id, email, full_name, phone, date_of_birth, avatar_url, address, preferences, role')
+      .select('id, email, full_name, phone, date_of_birth, avatar_url, address, preferences, is_vip, role')
       .single();
     if (error) throw error;
     return profileToUser(data);
@@ -571,7 +605,7 @@ export const getCustomers = async () => {
     const [{ data: profiles, error: profilesError }, { data: appointments, error: appointmentsError }] = await Promise.all([
       supabase
         .from('profiles')
-        .select('id, email, full_name, phone, avatar_url, role, created_at')
+        .select('id, email, full_name, phone, avatar_url, is_vip, role, created_at')
         .eq('role', 'customer'),
       supabase.from('appointments').select('customer_id, status, data, date')
     ]);
@@ -592,7 +626,8 @@ export const getCustomers = async () => {
         name: profile.full_name,
         email: profile.email,
         phone: profile.phone,
-        avatar: profile.avatar_url || '',
+        avatar: getCustomerAvatar(profile.avatar_url),
+        isVip: Boolean(profile.is_vip),
         role: profile.role,
         totalAppointments: visits.length,
         totalSpending: completedVisits.reduce((sum, visit) => sum + Number(visit.data.price || 0), 0),
@@ -603,8 +638,89 @@ export const getCustomers = async () => {
     });
   }
   await delay(150);
-  return getStorageItem(STORAGE_KEYS.CUSTOMERS, initialCustomers);
+  return getStorageItem(STORAGE_KEYS.CUSTOMERS, initialCustomers).map((customer) => ({
+    ...customer,
+    avatar: getCustomerAvatar(customer.avatar),
+    isVip: Boolean(customer.isVip),
+    status: customer.status === 'VIP Customer' || customer.status === 'Bridal Elite'
+      ? 'Active'
+      : customer.status
+  }));
 };
+
+export const createCustomer = async (customerData) => {
+  if (supabaseConfigured) {
+    const customer = await apiRequest('/customers', { method: 'POST', body: customerData });
+    if (customerData.isVip) await setCustomerVipStatus(customer.id, true);
+    return { ...customer, isVip: Boolean(customerData.isVip), invitationSent: true };
+  }
+  await delay(200);
+  const customers = getStorageItem(STORAGE_KEYS.CUSTOMERS, initialCustomers);
+  if (customers.some((customer) => customer.email.toLowerCase() === customerData.email.toLowerCase())) {
+    throw new Error('A customer with this email address already exists.');
+  }
+  const newCustomer = {
+    id: `cust-${Date.now()}`,
+    name: customerData.name.trim(),
+    email: customerData.email.trim(),
+    phone: customerData.phone.trim(),
+    avatar: '',
+    isVip: Boolean(customerData.isVip),
+    totalAppointments: 0,
+    totalSpending: 0,
+    lastVisit: 'Never',
+    status: 'New Customer',
+    role: 'customer'
+  };
+  setStorageItem(STORAGE_KEYS.CUSTOMERS, [newCustomer, ...customers]);
+  return newCustomer;
+};
+
+export const setCustomerVipStatus = async (customerId, isVip) => {
+  if (supabaseConfigured) {
+    const { error } = await supabase.rpc('set_customer_vip_status', {
+      customer_id_input: customerId,
+      is_vip_input: Boolean(isVip)
+    });
+    if (error) throw error;
+    return { id: customerId, isVip: Boolean(isVip) };
+  }
+  await delay(100);
+  const customers = getStorageItem(STORAGE_KEYS.CUSTOMERS, initialCustomers);
+  const index = customers.findIndex((customer) => customer.id === customerId);
+  if (index < 0) throw new Error('Customer not found.');
+  customers[index] = { ...customers[index], isVip: Boolean(isVip) };
+  setStorageItem(STORAGE_KEYS.CUSTOMERS, customers);
+  return customers[index];
+};
+
+export const deleteCustomer = async (customerId) => {
+  if (supabaseConfigured) {
+    return apiRequest(`/customers/${encodeURIComponent(customerId)}`, { method: 'DELETE' });
+  }
+  await delay(200);
+  const customers = getStorageItem(STORAGE_KEYS.CUSTOMERS, initialCustomers);
+  const customer = customers.find((record) => record.id === customerId);
+  setStorageItem(STORAGE_KEYS.CUSTOMERS, customers.filter((record) => record.id !== customerId));
+  if (customer) {
+    const appointments = getStorageItem(STORAGE_KEYS.APPOINTMENTS, initialAppointments);
+    setStorageItem(STORAGE_KEYS.APPOINTMENTS, appointments.filter((appointment) => (
+      appointment.customerId !== customerId && appointment.customerEmail !== customer.email
+    )));
+  }
+  return { success: true, id: customerId };
+};
+
+export const getAdmins = async () => apiRequest('/customers/admins');
+
+export const inviteAdmin = async (adminData) =>
+  apiRequest('/customers/admins', { method: 'POST', body: adminData });
+
+export const sendAdminPasswordSetup = async (adminId) =>
+  apiRequest(`/customers/admins/${encodeURIComponent(adminId)}/send-password-setup`, { method: 'POST' });
+
+export const deleteAdmin = async (adminId) =>
+  apiRequest(`/customers/admins/${encodeURIComponent(adminId)}`, { method: 'DELETE' });
 
 export const loginUser = async ({ email, password, role = 'customer' }) => {
   if (supabaseConfigured) {
@@ -646,10 +762,10 @@ export const registerUser = async (formData) => {
     id: `cust-${Date.now()}`,
     name: formData.name,
     email: formData.email,
-    phone: formData.phone || '+91 90000 00000',
+    phone: formData.phone || '',
     dob: formData.dob || '1995-01-01',
-    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
-    address: 'Coimbatore, Tamil Nadu',
+    avatar: '',
+    address: '',
     preferences: {
       skinType: 'Normal',
       hairType: 'Straight',
@@ -673,9 +789,14 @@ export const registerUser = async (formData) => {
 // OFFERS API (Future: /api/offers)
 // ==========================================
 export const getOffers = async ({ includeInactive = false } = {}) => {
-  if (supabaseConfigured) return getCatalogRecords(catalogTables.offers, initialOffers, includeInactive);
+  if (supabaseConfigured) {
+    const { error } = await supabase.rpc('delete_expired_salon_offers');
+    if (error) throw error;
+    const offers = await getCatalogRecords(catalogTables.offers, initialOffers, includeInactive);
+    return filterExpiredOffers(offers);
+  }
   await delay(150);
-  const offers = getStorageItem(STORAGE_KEYS.OFFERS, initialOffers);
+  const offers = removeExpiredLocalOffers(getStorageItem(STORAGE_KEYS.OFFERS, initialOffers));
   return includeInactive ? offers : offers.filter(visibleCatalogItem);
 };
 
@@ -728,20 +849,21 @@ export const deleteOffer = async (id) => {
 export const getReviews = async () => {
   if (supabaseConfigured) return getCatalogRecords(catalogTables.reviews, initialReviews);
   await delay(150);
-  return getStorageItem(STORAGE_KEYS.REVIEWS, initialReviews);
+  const reviews = getStorageItem(STORAGE_KEYS.REVIEWS, initialReviews);
+  const customerReviews = reviews.filter((review) => !/^rev-[1-5]$/.test(review.id));
+  if (customerReviews.length !== reviews.length) setStorageItem(STORAGE_KEYS.REVIEWS, customerReviews);
+  return customerReviews;
 };
 
 export const addReview = async (reviewData) => {
   if (supabaseConfigured) {
-    const { data: { user }, error } = await supabase.auth.getUser();
-    if (error) throw error;
-    if (!user) throw new Error('Sign in before submitting a review.');
-    return createCatalogRecord(catalogTables.reviews, {
-      date: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }),
-      verified: true,
-      customerId: user.id,
-      ...reviewData
+    const { data, error } = await supabase.rpc('submit_customer_review', {
+      appointment_id_input: reviewData.appointmentId,
+      rating_input: reviewData.rating,
+      comment_input: reviewData.comment
     });
+    if (error) throw error;
+    return data;
   }
   await delay(200);
   const reviews = getStorageItem(STORAGE_KEYS.REVIEWS, initialReviews);
@@ -749,7 +871,7 @@ export const addReview = async (reviewData) => {
     id: `rev-${Date.now()}`,
     date: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }),
     verified: true,
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80',
+    avatar: '',
     ...reviewData
   };
   const updated = [newReview, ...reviews];
@@ -792,134 +914,95 @@ export const deleteGalleryItem = async (id) => {
 // REPORTS & ANALYTICS API (Future: /api/reports)
 // ==========================================
 export const getReportsData = async () => {
-  if (supabaseConfigured) {
-    const [{ data: appointments, error: appointmentsError }, { data: customers, error: customersError }] = await Promise.all([
-      supabase.from('appointments').select('customer_id, date, status, data'),
-      supabase.from('profiles').select('id').eq('role', 'customer')
-    ]);
-    if (appointmentsError) throw appointmentsError;
-    if (customersError) throw customersError;
+  if (!supabaseConfigured) throw new Error('Business reports require a configured Supabase database.');
+  const [{ data: appointments, error: appointmentsError }, { data: customers, error: customersError }] = await Promise.all([
+    supabase.from('appointments').select('customer_id, date, status, data'),
+    supabase.from('profiles').select('id').eq('role', 'customer')
+  ]);
+  if (appointmentsError) throw appointmentsError;
+  if (customersError) throw customersError;
 
-    const records = appointments || [];
-    const today = new Date();
-    const todayKey = today.toISOString().slice(0, 10);
-    const monthKey = todayKey.slice(0, 7);
-    const completed = records.filter((appointment) => appointment.status === 'Completed');
-    const monthlyTrends = Array.from({ length: 6 }, (_, index) => {
-      const month = new Date(today.getFullYear(), today.getMonth() - 5 + index, 1);
-      const key = `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, '0')}`;
-      const monthAppointments = records.filter((appointment) => appointment.date?.startsWith(key));
-      return {
-        month: month.toLocaleString('en-US', { month: 'short' }),
-        revenue: monthAppointments
-          .filter((appointment) => appointment.status === 'Completed')
-          .reduce((sum, appointment) => sum + Number(appointment.data.price || 0), 0),
-        bookings: monthAppointments.length
-      };
-    });
-    const weeklyTrends = Array.from({ length: 7 }, (_, index) => {
-      const date = new Date(today);
-      date.setDate(today.getDate() - (6 - index));
-      const key = date.toISOString().slice(0, 10);
-      const daily = records.filter((appointment) => appointment.date === key);
-      return {
-        day: date.toLocaleString('en-US', { weekday: 'short' }),
-        appointments: daily.length,
-        revenue: daily
-          .filter((appointment) => appointment.status === 'Completed')
-          .reduce((sum, appointment) => sum + Number(appointment.data.price || 0), 0)
-      };
-    });
-    const serviceTotals = new Map();
-    const staffTotals = new Map();
-    for (const appointment of records) {
-      if (appointment.status === 'Cancelled') continue;
-      const price = Number(appointment.data.price || 0);
-      const serviceName = appointment.data.serviceName || 'Salon service';
-      const service = serviceTotals.get(serviceName) || { name: serviceName, bookings: 0, revenue: 0 };
-      service.bookings += 1;
-      service.revenue += price;
-      serviceTotals.set(serviceName, service);
-      const staffName = appointment.data.staffName || 'Unassigned';
-      const staff = staffTotals.get(staffName) || {
-        name: staffName,
-        role: appointment.data.staffRole || 'Salon professional',
-        bookings: 0,
-        revenue: 0,
-        rating: Number(appointment.data.rating || 5)
-      };
-      staff.bookings += 1;
-      staff.revenue += price;
-      staffTotals.set(staffName, staff);
-    }
-    const currentMonth = records.filter((appointment) => appointment.date?.startsWith(monthKey));
-    const completedTotal = completed.reduce((sum, appointment) => sum + Number(appointment.data.price || 0), 0);
+  const records = appointments || [];
+  const completed = records.filter((appointment) => appointment.status === 'Completed');
+  const todayKey = getSalonDateKey(new Date());
+  const monthKey = todayKey.slice(0, 7);
+  const completedValue = (appointment) => Math.max(0, Number(appointment.data?.price) || 0);
+  const totalCompletedValue = completed.reduce((sum, appointment) => sum + completedValue(appointment), 0);
+  const monthlyTrends = Array.from({ length: 6 }, (_, index) => {
+    const [year, month] = monthKey.split('-').map(Number);
+    const monthStart = new Date(Date.UTC(year, month - 1 - (5 - index), 1));
+    const key = monthStart.toISOString().slice(0, 7);
+    const monthAppointments = completed.filter((appointment) => appointment.date?.startsWith(key));
     return {
-      summary: {
-        totalRevenue: completedTotal,
-        monthlyRevenue: currentMonth
-          .filter((appointment) => appointment.status === 'Completed')
-          .reduce((sum, appointment) => sum + Number(appointment.data.price || 0), 0),
-        totalAppointments: records.length,
-        todayAppointments: records.filter((appointment) => appointment.date === todayKey).length,
-        pendingAppointments: records.filter((appointment) => appointment.status === 'Pending').length,
-        confirmedAppointments: records.filter((appointment) => appointment.status === 'Confirmed').length,
-        completedAppointments: completed.length,
-        cancelledAppointments: records.filter((appointment) => appointment.status === 'Cancelled').length,
-        totalCustomers: customers?.length || 0
-      },
-      weeklyTrends,
-      monthlyTrends,
-      topServices: [...serviceTotals.values()].sort((a, b) => b.bookings - a.bookings).slice(0, 5),
-      staffPerformance: [...staffTotals.values()].sort((a, b) => b.revenue - a.revenue).slice(0, 5)
+      month: monthStart.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' }),
+      completedValue: monthAppointments.reduce((sum, appointment) => sum + completedValue(appointment), 0),
+      completedAppointments: monthAppointments.length
     };
+  });
+  const weeklyTrends = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(`${todayKey}T00:00:00Z`);
+    date.setUTCDate(date.getUTCDate() - (6 - index));
+    const key = date.toISOString().slice(0, 10);
+    const daily = records.filter((appointment) => appointment.date === key);
+    return {
+      day: date.toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' }),
+      appointments: daily.length,
+      completedValue: daily
+        .filter((appointment) => appointment.status === 'Completed')
+        .reduce((sum, appointment) => sum + completedValue(appointment), 0)
+    };
+  });
+  const serviceTotals = new Map();
+  const staffTotals = new Map();
+  const completedByCustomer = new Map();
+  for (const appointment of completed) {
+    const price = completedValue(appointment);
+    const serviceName = appointment.data?.serviceName || 'Unspecified service';
+    const service = serviceTotals.get(serviceName) || { name: serviceName, bookings: 0, completedValue: 0 };
+    service.bookings += 1;
+    service.completedValue += price;
+    serviceTotals.set(serviceName, service);
+    const staffName = appointment.data?.staffName || 'Unassigned';
+    const staff = staffTotals.get(staffName) || {
+      name: staffName,
+      role: appointment.data?.staffRole || 'Not specified',
+      bookings: 0,
+      completedValue: 0
+    };
+    staff.bookings += 1;
+    staff.completedValue += price;
+    staffTotals.set(staffName, staff);
+    if (appointment.customer_id) {
+      completedByCustomer.set(
+        appointment.customer_id,
+        (completedByCustomer.get(appointment.customer_id) || 0) + 1
+      );
+    }
   }
-  await delay(200);
-  const appointments = getStorageItem(STORAGE_KEYS.APPOINTMENTS, initialAppointments);
-  const completedApts = appointments.filter((a) => a.status === 'Completed');
-  const confirmedApts = appointments.filter((a) => a.status === 'Confirmed');
+  const repeatCustomerCount = [...completedByCustomer.values()].filter((count) => count > 1).length;
 
   return {
     summary: {
-      totalRevenue: completedApts.reduce((sum, a) => sum + (a.price || 0), 0) + 142000,
-      monthlyRevenue: 84500,
-      totalAppointments: appointments.length + 184,
-      todayAppointments: 6,
-      pendingAppointments: appointments.filter((a) => a.status === 'Pending').length,
-      confirmedAppointments: confirmedApts.length,
-      completedAppointments: completedApts.length + 150,
-      cancelledAppointments: appointments.filter((a) => a.status === 'Cancelled').length,
-      totalCustomers: 142
+      totalCompletedValue,
+      monthlyCompletedValue: completed
+        .filter((appointment) => appointment.date?.startsWith(monthKey))
+        .reduce((sum, appointment) => sum + completedValue(appointment), 0),
+      averageCompletedValue: completed.length ? totalCompletedValue / completed.length : 0,
+      repeatCustomerRate: completedByCustomer.size
+        ? (repeatCustomerCount / completedByCustomer.size) * 100
+        : 0,
+      totalAppointments: records.length,
+      todayKey,
+      todayAppointments: records.filter((appointment) => appointment.date === todayKey).length,
+      pendingAppointments: records.filter((appointment) => appointment.status === 'Pending').length,
+      confirmedAppointments: records.filter((appointment) => appointment.status === 'Confirmed').length,
+      completedAppointments: completed.length,
+      cancelledAppointments: records.filter((appointment) => appointment.status === 'Cancelled').length,
+      totalCustomers: customers?.length || 0
     },
-    weeklyTrends: [
-      { day: 'Mon', appointments: 12, revenue: 18500 },
-      { day: 'Tue', appointments: 15, revenue: 22400 },
-      { day: 'Wed', appointments: 18, revenue: 29800 },
-      { day: 'Thu', appointments: 14, revenue: 21000 },
-      { day: 'Fri', appointments: 24, revenue: 41200 },
-      { day: 'Sat', appointments: 32, revenue: 58900 },
-      { day: 'Sun', appointments: 28, revenue: 49500 }
-    ],
-    monthlyTrends: [
-      { month: 'May', revenue: 62000, bookings: 78 },
-      { month: 'Jun', revenue: 71000, bookings: 92 },
-      { month: 'Jul', revenue: 68500, bookings: 86 },
-      { month: 'Aug', revenue: 79000, bookings: 104 },
-      { month: 'Sep', revenue: 84500, bookings: 118 },
-      { month: 'Oct (Proj)', revenue: 98000, bookings: 135 }
-    ],
-    topServices: [
-      { name: 'Royal Bridal HD Makeup', bookings: 48, revenue: 696000 },
-      { name: '24K Gold Luxury Facial', bookings: 92, revenue: 322000 },
-      { name: 'Balayage & Color', bookings: 54, revenue: 297000 },
-      { name: 'Botanical Keratin Spa', bookings: 68, revenue: 217600 },
-      { name: 'Signature Haircut', bookings: 145, revenue: 174000 }
-    ],
-    staffPerformance: [
-      { name: 'Meena Sundaram', role: 'Bridal Artist', bookings: 52, revenue: 410000, rating: 5.0 },
-      { name: 'Priya Sharma', role: 'Hair Stylist', bookings: 98, revenue: 312000, rating: 4.9 },
-      { name: 'Anitha Nair', role: 'Aesthetician', bookings: 86, revenue: 254000, rating: 4.9 },
-      { name: 'Divya Krishnan', role: 'Nail Artist', bookings: 74, revenue: 148000, rating: 4.8 }
-    ]
+    weeklyTrends,
+    monthlyTrends,
+    topServices: [...serviceTotals.values()].sort((a, b) => b.bookings - a.bookings).slice(0, 5),
+    staffPerformance: [...staffTotals.values()].sort((a, b) => b.completedValue - a.completedValue).slice(0, 5)
   };
 };

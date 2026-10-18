@@ -6,12 +6,16 @@ import {
   getServices,
   getStaff,
   getAvailableSlots,
-  createAppointment
+  createAppointment,
+  createPaymentOrder,
+  verifyPayment
 } from '../services/api';
 import { Button } from '../components/Button';
 import { Badge } from '../components/Badge';
 import { Loading } from '../components/Loading';
 import { supabaseConfigured } from '../services/supabase';
+import { getServiceOptions, selectServiceOption } from '../utils/serviceOptions';
+import { getPaymentMethodLabel, PAYMENT_METHODS } from '../utils/payment';
 import {
   Scissors,
   User,
@@ -26,6 +30,73 @@ import {
   AlertCircle
 } from '../components/icons';
 
+const getSalonDateKey = (date = new Date()) => {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(date);
+  const part = (type) => parts.find((item) => item.type === type)?.value;
+  return `${part('year')}-${part('month')}-${part('day')}`;
+};
+
+const addDaysToDateKey = (dateKey, days) => {
+  const date = new Date(`${dateKey}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+};
+
+const formatDateKey = (dateKey, options) => new Date(`${dateKey}T00:00:00Z`)
+  .toLocaleDateString('en-GB', { ...options, timeZone: 'UTC' });
+
+const loadRazorpayCheckout = () => new Promise((resolve, reject) => {
+  if (window.Razorpay) {
+    resolve();
+    return;
+  }
+  const script = document.createElement('script');
+  script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+  script.async = true;
+  script.onload = resolve;
+  script.onerror = () => reject(new Error('Unable to load the secure payment checkout.'));
+  document.body.appendChild(script);
+});
+
+const openRazorpayCheckout = ({ order, customer, serviceName, onSuccess }) => new Promise((resolve, reject) => {
+  const checkout = new window.Razorpay({
+    key: order.keyId,
+    amount: order.amount,
+    currency: order.currency,
+    name: 'Her Glow Home Salon',
+    description: serviceName,
+    order_id: order.orderId,
+    prefill: {
+      name: customer.name,
+      email: customer.email,
+      contact: customer.phone
+    },
+    theme: { color: '#b58b3c' },
+    handler: async (response) => {
+      try {
+        const verification = await verifyPayment({
+          razorpayOrderId: response.razorpay_order_id,
+          razorpayPaymentId: response.razorpay_payment_id,
+          razorpaySignature: response.razorpay_signature
+        });
+        await onSuccess({ ...response, verification });
+        resolve();
+      } catch (error) {
+        reject(error);
+      }
+    }
+  });
+  checkout.on('payment.failed', (response) => {
+    reject(new Error(response.error?.description || 'The online payment failed.'));
+  });
+  checkout.open();
+});
+
 export const BookAppointment = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -33,6 +104,7 @@ export const BookAppointment = () => {
   const { addToast } = useToast();
 
   const preselectedServiceId = searchParams.get('serviceId');
+  const preselectedVariantId = searchParams.get('variantId');
   const preselectedStaffId = searchParams.get('staffId');
   const preselectedOfferTitle = searchParams.get('offerTitle');
   const preselectedOfferPrice = searchParams.get('offerPrice');
@@ -47,16 +119,18 @@ export const BookAppointment = () => {
   // Form selections state
   const [selectedService, setSelectedService] = useState(null);
   const [selectedStaff, setSelectedStaff] = useState('any'); // 'any' or staffId
-  const [selectedDate, setSelectedDate] = useState('2026-10-10'); // Default convenient date
+  const [selectedDate, setSelectedDate] = useState(getSalonDateKey);
   const [selectedTime, setSelectedTime] = useState('03:00 PM');
+  const [paymentMethod, setPaymentMethod] = useState(PAYMENT_METHODS.AFTER_TREATMENT);
+  const [acceptedPaymentTerms, setAcceptedPaymentTerms] = useState(false);
   const [availableSlots, setAvailableSlots] = useState([]);
   const [slotsLoading, setSlotsLoading] = useState(false);
 
   // Customer Contact Info (Step 5)
   const [customerDetails, setCustomerDetails] = useState({
-    name: user?.name || (supabaseConfigured ? '' : 'Harish Varma'),
-    email: user?.email || (supabaseConfigured ? '' : 'harish.varma@example.com'),
-    phone: user?.phone || (supabaseConfigured ? '' : '+91 98765 43210'),
+    name: user?.name || '',
+    email: user?.email || '',
+    phone: user?.phone || '',
     notes: ''
   });
 
@@ -78,7 +152,10 @@ export const BookAppointment = () => {
     const fetchData = async () => {
       try {
         const [srvData, stData] = await Promise.all([getServices(), getStaff()]);
-        setServices(srvData);
+        const bookableServices = srvData.filter((service) =>
+          getServiceOptions(service).some((option) => !option.priceOnRequest)
+        );
+        setServices(bookableServices);
         setStaffList(stData);
 
         // Pre-select service or offer if passed via URL
@@ -95,13 +172,19 @@ export const BookAppointment = () => {
           setSelectedService(promoService);
           setCurrentStep(2);
         } else if (preselectedServiceId) {
-          const match = srvData.find((s) => s.id === preselectedServiceId);
+          const match = bookableServices.find((s) =>
+            s.id === preselectedServiceId || s.variantIds?.includes(preselectedServiceId)
+          );
           if (match) {
-            setSelectedService(match);
+            const options = getServiceOptions(match).filter((option) => !option.priceOnRequest);
+            const selectedOption = options.find((option) => option.id === preselectedVariantId) || options[0];
+            setSelectedService(selectServiceOption(match, selectedOption.id));
             setCurrentStep(2);
           }
-        } else if (srvData.length > 0) {
-          setSelectedService(srvData[0]);
+        } else if (bookableServices.length > 0) {
+          const firstService = bookableServices[0];
+          const firstOption = getServiceOptions(firstService).find((option) => !option.priceOnRequest);
+          setSelectedService(selectServiceOption(firstService, firstOption.id));
         }
 
         if (preselectedStaffId) {
@@ -114,7 +197,7 @@ export const BookAppointment = () => {
       }
     };
     fetchData();
-  }, [preselectedServiceId, preselectedStaffId, preselectedOfferTitle, preselectedOfferPrice]);
+  }, [preselectedServiceId, preselectedVariantId, preselectedStaffId, preselectedOfferTitle, preselectedOfferPrice]);
 
   // Sync logged in user details if available
   useEffect(() => {
@@ -153,9 +236,7 @@ export const BookAppointment = () => {
   // Format readable date
   const getFormattedDate = (dateStr) => {
     if (!dateStr) return '';
-    const [y, m, d] = dateStr.split('-');
-    const date = new Date(Number(y), Number(m) - 1, Number(d));
-    return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+    return formatDateKey(dateStr, { day: 'numeric', month: 'long', year: 'numeric' });
   };
 
   const handleNext = () => {
@@ -179,10 +260,32 @@ export const BookAppointment = () => {
   };
 
   const handleConfirmAppointment = async () => {
+    if (paymentMethod === PAYMENT_METHODS.ONLINE && !acceptedPaymentTerms) {
+      addToast('Please accept the payment terms before continuing.', 'error');
+      return;
+    }
     setSubmitting(true);
     try {
       const selectedStaffObj = staffList.find((s) => s.id === selectedStaff);
       const staffDisplayName = selectedStaff === 'any' ? 'Any Available Professional' : (selectedStaffObj?.name || 'Assigned Stylist');
+
+      let paymentDetails = {};
+      if (paymentMethod === PAYMENT_METHODS.ONLINE) {
+        const order = await createPaymentOrder({
+          serviceId: selectedService.id,
+          serviceOptionId: selectedService.selectedOptionId,
+          serviceVariantIds: selectedService.variantIds
+        });
+        await loadRazorpayCheckout();
+        paymentDetails = await new Promise((resolve, reject) => {
+          openRazorpayCheckout({
+            order,
+            customer: customerDetails,
+            serviceName: selectedService.name,
+            onSuccess: resolve
+          }).catch(reject);
+        });
+      }
 
       const appointmentPayload = {
         customerId: user?.id || 'cust-1',
@@ -190,7 +293,10 @@ export const BookAppointment = () => {
         customerEmail: customerDetails.email,
         customerPhone: customerDetails.phone,
         serviceId: selectedService.id,
-        serviceName: selectedService.name,
+        serviceName: selectedService.selectedOption
+          ? `${selectedService.name} — ${selectedService.selectedOption.name}`
+          : selectedService.name,
+        serviceOptionId: selectedService.selectedOptionId,
         category: selectedService.category,
         staffId: selectedStaff,
         staffName: staffDisplayName,
@@ -199,6 +305,12 @@ export const BookAppointment = () => {
         time: selectedTime,
         duration: selectedService.duration,
         price: selectedService.price,
+        paymentMethod,
+        ...paymentDetails,
+        razorpayOrderId: paymentDetails.razorpay_order_id,
+        razorpayPaymentId: paymentDetails.razorpay_payment_id,
+        razorpaySignature: paymentDetails.razorpay_signature,
+        serviceVariantIds: selectedService.variantIds,
         notes: customerDetails.notes,
         status: 'Confirmed'
       };
@@ -209,7 +321,7 @@ export const BookAppointment = () => {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) {
       console.error('Error confirming appointment', err);
-      addToast('Failed to complete booking. Please try again.', 'error');
+      addToast(err.message || 'Failed to complete booking. Please try again.', 'error');
     } finally {
       setSubmitting(false);
     }
@@ -228,7 +340,7 @@ export const BookAppointment = () => {
     return (
       <div className="max-w-xl mx-auto px-4 py-20 text-center">
         <h1 className="font-serif text-3xl font-bold text-charcoal-900">Sign in to book your appointment</h1>
-        <p className="mt-3 text-sm text-charcoal-600">Your booking will be linked to your Aura Luxe account.</p>
+        <p className="mt-3 text-sm text-charcoal-600">Your booking will be linked to your Her Glow account.</p>
         <Link
           to={`/login?returnTo=${encodeURIComponent(returnTo)}`}
           className="inline-flex mt-6 px-6 py-3 rounded-full bg-gold-500 text-charcoal-950 font-semibold"
@@ -258,7 +370,7 @@ export const BookAppointment = () => {
               We Look Forward to Welcoming You
             </h1>
             <p className="text-sm text-charcoal-600 mt-2 max-w-md mx-auto">
-              Your appointment has been successfully scheduled and added to our salon agenda. A confirmation SMS & email have been dispatched.
+              Your appointment has been successfully scheduled and added to our salon agenda.
             </p>
           </div>
 
@@ -292,9 +404,18 @@ export const BookAppointment = () => {
             </div>
 
             <div className="flex items-center justify-between pt-3 border-t border-beige-200 text-sm sm:text-base font-bold text-charcoal-900">
-              <span>Total Payable at Parlour:</span>
+              <span>
+                {confirmedBooking.paymentMethod === PAYMENT_METHODS.ONLINE
+                  ? 'Selected payment method:'
+                  : 'Total Payable after treatment:'}
+              </span>
               <span className="font-serif text-xl text-gold-700">₹{confirmedBooking.price.toLocaleString('en-IN')}</span>
             </div>
+            <p className="text-xs text-charcoal-600">
+              {getPaymentMethodLabel(confirmedBooking.paymentMethod)}
+              {confirmedBooking.paymentMethod === PAYMENT_METHODS.ONLINE &&
+                ' completed securely through Razorpay.'}
+            </p>
           </div>
 
           {/* Post Confirmation Actions */}
@@ -407,11 +528,16 @@ export const BookAppointment = () => {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[460px] overflow-y-auto pr-1">
                 {services.map((service) => {
+                  const options = getServiceOptions(service).filter((option) => !option.priceOnRequest);
                   const isSelected = selectedService?.id === service.id;
+                  const selectedOptionId = isSelected
+                    ? selectedService.selectedOptionId
+                    : options[0]?.id;
+                  const selectedOption = options.find((option) => option.id === selectedOptionId) || options[0];
                   return (
                     <div
                       key={service.id}
-                      onClick={() => setSelectedService(service)}
+                      onClick={() => setSelectedService(selectServiceOption(service, options[0].id))}
                       className={`p-4 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between ${
                         isSelected
                           ? 'border-gold-500 bg-cream-50 ring-2 ring-gold-400/40 shadow-sm'
@@ -435,9 +561,34 @@ export const BookAppointment = () => {
                         </div>
                       </div>
 
+                      {service.variants?.length > 0 && (
+                        <fieldset
+                          onClick={(event) => event.stopPropagation()}
+                          className="mb-3 space-y-1.5"
+                        >
+                          <legend className="text-[10px] text-charcoal-500 uppercase tracking-wider mb-1">Choose an option</legend>
+                          {options.map((option) => (
+                            <label key={option.id} className="flex items-center justify-between gap-2 text-xs text-charcoal-700 cursor-pointer">
+                              <span className="flex items-center gap-2">
+                                <input
+                                  type="radio"
+                                  name={`booking-option-${service.id}`}
+                                  value={option.id}
+                                  checked={selectedOptionId === option.id}
+                                  onChange={() => setSelectedService(selectServiceOption(service, option.id))}
+                                  className="accent-gold-600"
+                                />
+                                {option.name}
+                              </span>
+                              <span className="font-medium">₹{option.price.toLocaleString('en-IN')}</span>
+                            </label>
+                          ))}
+                        </fieldset>
+                      )}
+
                       <div className="flex items-center justify-between pt-2 border-t border-beige-200/80">
                         <span className="font-serif font-bold text-charcoal-900 text-base">
-                          ₹{service.price.toLocaleString('en-IN')}
+                          ₹{selectedOption?.price.toLocaleString('en-IN')}
                         </span>
                         <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
                           isSelected ? 'bg-gold-600 text-white' : 'bg-beige-200 text-charcoal-700'
@@ -523,7 +674,6 @@ export const BookAppointment = () => {
                             {st.name}
                           </h4>
                           <p className="text-xs font-medium text-gold-700 truncate">{st.role}</p>
-                          <span className="text-[11px] text-charcoal-500 block mt-0.5">★ {st.rating} ({st.reviewsCount})</span>
                         </div>
                       </div>
 
@@ -568,7 +718,7 @@ export const BookAppointment = () => {
                   <input
                     type="date"
                     value={selectedDate}
-                    min="2026-10-02"
+                    min={getSalonDateKey()}
                     onChange={(e) => setSelectedDate(e.target.value)}
                     className="p-3.5 text-base sm:text-lg font-serif font-bold text-charcoal-900 rounded-xl border border-beige-300 focus:outline-none focus:ring-2 focus:ring-gold-400 bg-white shadow-sm cursor-pointer"
                   />
@@ -584,10 +734,10 @@ export const BookAppointment = () => {
                   </span>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                     {[
-                      { label: 'Today (Oct 2)', date: '2026-10-02' },
-                      { label: 'Tomorrow (Oct 3)', date: '2026-10-03' },
-                      { label: 'This Weekend (Oct 4)', date: '2026-10-04' },
-                      { label: 'Oct 10, 2026', date: '2026-10-10' }
+                      { label: 'Today', date: getSalonDateKey() },
+                      { label: 'Tomorrow', date: addDaysToDateKey(getSalonDateKey(), 1) },
+                      { label: 'In 3 days', date: addDaysToDateKey(getSalonDateKey(), 3) },
+                      { label: 'In one week', date: addDaysToDateKey(getSalonDateKey(), 7) }
                     ].map((qd) => (
                       <button
                         key={qd.date}
@@ -599,7 +749,7 @@ export const BookAppointment = () => {
                             : 'bg-white text-charcoal-700 border-beige-200 hover:bg-beige-50'
                         }`}
                       >
-                        {qd.label}
+                        {qd.label} · {formatDateKey(qd.date, { day: 'numeric', month: 'short' })}
                       </button>
                     ))}
                   </div>
@@ -686,7 +836,7 @@ export const BookAppointment = () => {
                     required
                     value={customerDetails.name}
                     onChange={(e) => setCustomerDetails({ ...customerDetails, name: e.target.value })}
-                    placeholder="e.g. Harish Varma"
+                    placeholder="Your name"
                     className="w-full text-xs sm:text-sm p-3 rounded-xl border border-beige-300 focus:outline-none focus:ring-2 focus:ring-gold-400 bg-cream-50/40"
                   />
                 </div>
@@ -714,7 +864,7 @@ export const BookAppointment = () => {
                       required
                       value={customerDetails.phone}
                       onChange={(e) => setCustomerDetails({ ...customerDetails, phone: e.target.value })}
-                      placeholder="+91 98765 43210"
+                      placeholder="Enter your phone number"
                       className="w-full text-xs sm:text-sm p-3 rounded-xl border border-beige-300 focus:outline-none focus:ring-2 focus:ring-gold-400 bg-cream-50/40"
                     />
                   </div>
@@ -758,7 +908,9 @@ export const BookAppointment = () => {
                       {selectedService?.category}
                     </span>
                     <h4 className="font-serif text-xl font-bold text-charcoal-900">
-                      {selectedService?.name}
+                      {selectedService?.selectedOption
+                        ? `${selectedService.name} — ${selectedService.selectedOption.name}`
+                        : selectedService?.name}
                     </h4>
                   </div>
                   <span className="font-serif text-2xl font-bold text-charcoal-900">
@@ -798,10 +950,66 @@ export const BookAppointment = () => {
                 </div>
               </div>
 
+              <fieldset className="space-y-3">
+                <legend className="font-serif text-lg font-bold text-charcoal-900">Choose a payment method</legend>
+                <label className={`flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition-colors ${
+                  paymentMethod === PAYMENT_METHODS.AFTER_TREATMENT
+                    ? 'border-gold-500 bg-gold-50/60'
+                    : 'border-beige-200 bg-white hover:bg-cream-50'
+                }`}>
+                  <input
+                    type="radio"
+                    name="paymentMethod"
+                    value={PAYMENT_METHODS.AFTER_TREATMENT}
+                    checked={paymentMethod === PAYMENT_METHODS.AFTER_TREATMENT}
+                    onChange={() => setPaymentMethod(PAYMENT_METHODS.AFTER_TREATMENT)}
+                    className="mt-0.5 accent-amber-600"
+                  />
+                  <span>
+                    <strong className="block text-sm text-charcoal-900">Pay after treatment</strong>
+                    <span className="text-xs text-charcoal-600">Pay at the salon when your treatment is complete.</span>
+                  </span>
+                </label>
+                <label className={`flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition-colors ${
+                  paymentMethod === PAYMENT_METHODS.ONLINE
+                    ? 'border-gold-500 bg-gold-50/60'
+                    : 'border-beige-200 bg-white hover:bg-cream-50'
+                }`}>
+                  <input
+                    type="radio"
+                    name="paymentMethod"
+                    value={PAYMENT_METHODS.ONLINE}
+                    checked={paymentMethod === PAYMENT_METHODS.ONLINE}
+                    onChange={() => setPaymentMethod(PAYMENT_METHODS.ONLINE)}
+                    className="mt-0.5 accent-amber-600"
+                  />
+                  <span>
+                    <strong className="block text-sm text-charcoal-900">Pay online</strong>
+                    <span className="text-xs text-charcoal-600">Select online payment for this treatment.</span>
+                  </span>
+                </label>
+              </fieldset>
+
+              {paymentMethod === PAYMENT_METHODS.ONLINE && (
+                <label className="flex items-start gap-2 text-xs text-charcoal-700">
+                  <input
+                    type="checkbox"
+                    checked={acceptedPaymentTerms}
+                    onChange={(event) => setAcceptedPaymentTerms(event.target.checked)}
+                    className="mt-0.5 accent-amber-600"
+                  />
+                  <span>
+                    I agree to the <Link to="/payment-terms" className="font-semibold text-gold-700 underline">online payment terms</Link>, including payment verification, cancellation, and refund conditions.
+                  </span>
+                </label>
+              )}
+
               <div className="bg-amber-50/70 p-3.5 rounded-xl border border-amber-200/80 text-xs text-amber-800 flex items-start gap-2">
                 <AlertCircle size={16} className="shrink-0 text-amber-600 mt-0.5" />
                 <span>
-                  No immediate advance payment required. Payment is collected at the parlour via UPI, Credit Card, or Cash following your service.
+                  {paymentMethod === PAYMENT_METHODS.ONLINE
+                    ? 'You will be redirected to Razorpay Checkout. Your appointment is confirmed only after the payment is verified.'
+                    : 'No advance payment is required. Pay at the salon after your treatment by UPI, card, or cash.'}
                 </span>
               </div>
             </div>

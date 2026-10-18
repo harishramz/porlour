@@ -16,6 +16,7 @@ import {
   ArrowRight
 } from './icons';
 import { Button } from './Button';
+import { DEFAULT_PROFILE_IMAGE, getCustomerProfileImage } from '../utils/profileImage';
 
 export const Navbar = () => {
   const { user, role, isAuthenticated, logout } = useAuth();
@@ -51,9 +52,6 @@ export const Navbar = () => {
     { label: 'Home', path: '/' },
     { label: 'Services', path: '/services' },
     { label: 'About Us', path: '/about' },
-    { label: 'Our Team', path: '/team' },
-    { label: 'Gallery', path: '/gallery' },
-    { label: 'Offers', path: '/offers' },
     { label: 'Contact', path: '/contact' }
   ];
 
@@ -69,15 +67,17 @@ export const Navbar = () => {
         <div className="flex items-center justify-between">
           {/* Brand Logo */}
           <Link to="/" className="flex items-center gap-3 group">
-            <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-charcoal-900 to-charcoal-800 text-gold-400 flex items-center justify-center border border-gold-400/40 shadow-sm group-hover:border-gold-400 transition-colors">
-              <Sparkles size={20} />
-            </div>
+            <img
+              src="/images/her-glow-logo.jpeg"
+              alt=""
+              className="w-11 h-11 rounded-full object-cover border border-gold-400/40 shadow-sm"
+            />
             <div>
               <span className="font-serif text-2xl font-bold tracking-widest text-charcoal-900 block leading-none">
-                AURA LUXE
+                HER GLOW
               </span>
               <span className="text-[10px] tracking-[0.25em] uppercase text-gold-700 font-semibold block mt-0.5">
-                Haute Beauty & Spa
+                Home Salon
               </span>
             </div>
           </Link>
@@ -137,9 +137,12 @@ export const Navbar = () => {
                     className="flex items-center gap-2 p-1.5 rounded-full hover:bg-beige-100 transition-all border border-beige-300"
                   >
                     <img
-                      src={user.avatar || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80'}
+                      src={getCustomerProfileImage(user.avatar)}
                       alt={user.name}
                       className="w-8 h-8 rounded-full object-cover border border-gold-300"
+                      onError={(event) => {
+                        event.currentTarget.src = DEFAULT_PROFILE_IMAGE;
+                      }}
                     />
                     <ChevronDown size={14} className="text-charcoal-600 pr-0.5" />
                   </button>
@@ -272,9 +275,12 @@ export const Navbar = () => {
               <>
                 <div className="p-3 bg-cream-100 rounded-xl mb-1 flex items-center gap-3">
                   <img
-                    src={user.avatar}
+                    src={getCustomerProfileImage(user.avatar)}
                     alt={user.name}
                     className="w-10 h-10 rounded-full object-cover border border-gold-400"
+                    onError={(event) => {
+                      event.currentTarget.src = DEFAULT_PROFILE_IMAGE;
+                    }}
                   />
                   <div>
                     <p className="text-xs text-charcoal-400">Logged in as</p>

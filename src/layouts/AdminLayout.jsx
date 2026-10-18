@@ -4,7 +4,6 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { DemoBar } from '../components/DemoBar';
 import {
-  Sparkles,
   LayoutDashboard,
   Calendar,
   Scissors,
@@ -23,6 +22,7 @@ import {
 } from '../components/icons';
 import { Button } from '../components/Button';
 import { supabaseConfigured } from '../services/supabase';
+import { DEFAULT_PROFILE_IMAGE } from '../utils/profileImage';
 
 export const AdminLayout = () => {
   const { user, logout, authLoading } = useAuth();
@@ -44,7 +44,9 @@ export const AdminLayout = () => {
     { label: 'Customers', path: '/admin/customers', icon: User },
     { label: 'Offers & Promos', path: '/admin/offers', icon: Tag },
     { label: 'Gallery Showcase', path: '/admin/gallery', icon: Image },
-    { label: 'Business Reports', path: '/admin/reports', icon: BarChart2 }
+    { label: 'Business Reports', path: '/admin/reports', icon: BarChart2 },
+    { label: 'Admin Access', path: '/admin/admins', icon: Users },
+    { label: 'My Profile', path: '/admin/profile', icon: Settings }
   ];
 
   if (authLoading) return null;
@@ -75,12 +77,14 @@ export const AdminLayout = () => {
           <div>
             <div className="p-6 flex items-center justify-between border-b border-charcoal-800">
               <Link to="/admin" className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-full bg-gold-500 text-charcoal-950 flex items-center justify-center font-bold">
-                  <Sparkles size={16} />
-                </div>
+                <img
+                  src="/images/her-glow-logo.jpeg"
+                  alt="Her Glow"
+                  className="w-9 h-9 rounded-full object-cover border border-gold-500"
+                />
                 <div>
                   <span className="font-serif text-lg font-bold tracking-widest text-white block leading-none">
-                    AURA LUXE
+                    HER GLOW
                   </span>
                   <span className="text-[9px] uppercase tracking-widest text-gold-400 font-semibold block mt-0.5">
                     Admin Management
@@ -157,7 +161,7 @@ export const AdminLayout = () => {
                   Salon Administration
                 </h1>
                 <p className="text-[11px] text-charcoal-500 hidden sm:block">
-                  Aura Luxe Haute Beauty & Wellness • Operational Control
+                  Her Glow Home Salon • Admin Dashboard
                 </p>
               </div>
             </div>
@@ -166,15 +170,18 @@ export const AdminLayout = () => {
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-3">
                 <div className="text-right hidden sm:block">
-                  <p className="text-xs font-bold text-charcoal-900">Admin Manager</p>
+                  <p className="text-xs font-bold text-charcoal-900">{user.name || 'Admin Manager'}</p>
                   <p className="text-[10px] text-emerald-600 font-semibold flex items-center gap-1 justify-end">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Live Systems Ready
                   </p>
                 </div>
                 <img
-                  src="https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=150&q=80"
-                  alt="Admin Manager"
+                  src={user.avatar || DEFAULT_PROFILE_IMAGE}
+                  alt={user.name || 'Admin Manager'}
                   className="w-9 h-9 rounded-full object-cover border border-gold-400"
+                  onError={(event) => {
+                    event.currentTarget.src = DEFAULT_PROFILE_IMAGE;
+                  }}
                 />
               </div>
             </div>

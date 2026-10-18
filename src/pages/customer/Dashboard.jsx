@@ -71,6 +71,7 @@ export const CustomerDashboard = () => {
 
   // Favorite services list
   const favoriteServices = services.filter((s) => favoriteIds.includes(s.id)).slice(0, 3);
+  const savedFavoritesCount = favoriteIds.length;
 
   if (loading) {
     return <Loading text="Preparing your private member lounge..." />;
@@ -83,10 +84,10 @@ export const CustomerDashboard = () => {
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="space-y-2">
             <span className="text-xs uppercase tracking-[0.25em] text-gold-400 font-semibold flex items-center gap-1.5">
-              <Sparkles size={14} /> VIP Sanctuary Lounge
+              <Sparkles size={14} /> CUSTOMER DASHBOARD
             </span>
             <h1 className="font-serif text-3xl sm:text-4xl lg:text-5xl font-light text-white">
-              Welcome, <span className="font-normal italic text-gold-300">{user?.name || 'Harish'}</span>
+              Welcome, <span className="font-normal italic text-gold-300">{user?.name || 'there'}</span>
             </h1>
             <p className="text-xs sm:text-sm text-cream-200 max-w-xl font-light leading-relaxed">
               We look forward to pampering you. Review your scheduled rituals or book your next transformative session below.
@@ -171,7 +172,7 @@ export const CustomerDashboard = () => {
           </div>
           <div>
             <p className="font-serif text-3xl font-bold text-charcoal-900">
-              {favoriteIds.length}
+              {savedFavoritesCount}
             </p>
             <p className="text-xs text-charcoal-500 mt-1">Curated Treatments</p>
           </div>

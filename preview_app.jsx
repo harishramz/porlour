@@ -1,24 +1,24 @@
 const services = [
-  { name: 'Signature Haircut', price: '₹2,499', accent: 'bg-[#F8F1DD]' },
-  { name: '24K Gold Facial', price: '₹4,999', accent: 'bg-[#F9EAEA]' },
-  { name: 'Bridal Makeup', price: '₹12,999', accent: 'bg-[#F5EBE1]' },
-  { name: 'Luxury Mani Pedi', price: '₹3,299', accent: 'bg-[#FDFBF7]' }
+  { name: 'Eyebrow Threading', price: '₹39', accent: 'bg-[#F8F1DD]' },
+  { name: 'Full Arms Waxing — Honey', price: '₹279', accent: 'bg-[#F9EAEA]' },
+  { name: 'Gold Facial', price: '₹799', accent: 'bg-[#F5EBE1]' },
+  { name: 'Hair Spa — Shoulder Length', price: '₹699', accent: 'bg-[#FDFBF7]' }
 ];
 
 const stats = [
-  { label: 'Happy Clients', value: '12k+' },
-  { label: 'Average Rating', value: '4.9 ★' },
-  { label: 'Luxury Rituals', value: '45+' }
+  { label: 'Menu Items', value: '68' },
+  { label: 'Categories', value: '4' },
+  { label: 'Original Menu Pages', value: '3' }
 ];
 
 const perks = [
-  'Tailored skin & hair diagnostics',
-  'Certified beauty specialists',
-  'Hospital-grade hygiene standards',
-  'Organic premium formulations'
+  'Prices transcribed from the supplied salon menu',
+  'Threading, waxing, massage, skin, nail and hair services',
+  'Unpriced menu services clearly marked for enquiry',
+  'Book online or view the original menu pages'
 ];
 
-const heroImage = 'https://images.unsplash.com/photo-1521590832167-7e0cb36d4b3d?auto=format&fit=crop&w=1200&q=80';
+const heroImage = '/images/her-glow-logo.jpeg';
 
 function App() {
   return (
@@ -31,10 +31,10 @@ function App() {
       <header className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5">
         <nav className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-[#F8F1DD] flex items-center justify-center text-[#8E6E2E] font-serif text-xl">A</div>
+            <img src="/images/her-glow-logo.jpeg" alt="" className="w-10 h-10 rounded-full object-cover" />
             <div>
-              <div className="font-serif text-2xl leading-none tracking-wider">AURA LUXE</div>
-              <div className="text-[10px] uppercase tracking-[0.25em] text-[#737373]">Haute Beauty & Spa</div>
+              <div className="font-serif text-2xl leading-none tracking-wider">HER GLOW</div>
+              <div className="text-[10px] uppercase tracking-[0.25em] text-[#737373]">Home Salon</div>
             </div>
           </div>
 
@@ -58,15 +58,15 @@ function App() {
             <div className="lg:col-span-7 space-y-7">
               <div className="inline-flex items-center gap-2 bg-[#FAF6F0] border border-[#E4CA80]/60 rounded-full px-4 py-2 text-[11px] uppercase tracking-[0.25em] text-[#8E6E2E]">
                 <span>✦</span>
-                <span>Luxury Beauty Sanctuary</span>
+                <span>Her Glow Home Salon</span>
               </div>
 
               <h1 className="font-serif text-5xl sm:text-6xl xl:text-7xl leading-[0.94] tracking-tight text-[#1A1A1A]">
-                Beauty begins <span className="italic text-[#B08B42]">with you</span>
+                Look Good. <span className="italic text-[#B08B42]">Feel Good. Be You.</span>
               </h1>
 
               <p className="max-w-xl text-base sm:text-lg text-[#404040] leading-relaxed">
-                Personalized beauty rituals, premium treatments, and serene luxury experiences designed to help you feel radiant, confident, and beautifully restored.
+                Explore home salon services and prices from the Her Glow menu.
               </p>
 
               <div className="flex flex-col sm:flex-row gap-4">
@@ -90,18 +90,8 @@ function App() {
 
             <div className="lg:col-span-5 relative">
               <div className="absolute -inset-4 bg-gradient-to-br from-[#EEDDAF]/50 via-[#FAF6F0]/50 to-[#F2D3D4]/30 blur-xl rounded-[2rem]" />
-              <div className="relative overflow-hidden rounded-[2rem] border-2 border-white/80 shadow-[0_25px_70px_rgba(0,0,0,0.12)]">
-                <img src={heroImage} alt="Luxury beauty treatment" className="w-full h-[520px] object-cover" />
-                <div className="absolute inset-0 bg-gradient-to-t from-[#111111]/40 via-transparent to-transparent" />
-                <div className="absolute bottom-5 left-5 right-5 bg-white/90 backdrop-blur-sm rounded-2xl p-4 shadow-premium">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-full bg-[#F8F1DD] flex items-center justify-center text-[#8E6E2E] text-xl">★</div>
-                    <div>
-                      <div className="text-[#1A1A1A] font-semibold">Best Luxury Parlour 2026</div>
-                      <div className="text-[11px] uppercase tracking-[0.18em] text-[#737373]">Awarded Experience</div>
-                    </div>
-                  </div>
-                </div>
+              <div className="relative overflow-hidden rounded-[2rem] border-2 border-white/80 shadow-[0_25px_70px_rgba(0,0,0,0.12)] bg-[#fff2ee]">
+                <img src={heroImage} alt="Her Glow Home Salon logo" className="w-full h-[520px] object-contain" />
               </div>
             </div>
           </div>
@@ -130,12 +120,12 @@ function App() {
         </section>
 
         <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-center">
+          <div className="max-w-3xl mx-auto space-y-5">
             <div className="space-y-5">
               <div className="text-[11px] uppercase tracking-[0.28em] text-[#8E6E2E]">Why choose us</div>
-              <h2 className="font-serif text-4xl sm:text-5xl text-[#1A1A1A]">The Aura Luxe standard</h2>
+              <h2 className="font-serif text-4xl sm:text-5xl text-[#1A1A1A]">Her Glow Home Salon</h2>
               <p className="text-[#404040] leading-relaxed">
-                We blend advanced beauty science with a calming, luxurious experience to create rituals that are both results-driven and deeply restorative.
+                Find the menu, location and appointment options for Her Glow.
               </p>
 
               <ul className="space-y-3">
@@ -146,12 +136,6 @@ function App() {
                   </li>
                 ))}
               </ul>
-            </div>
-
-            <div className="rounded-[2rem] border border-[#EBD9CC] bg-white p-6 shadow-premium">
-              <div className="rounded-[1.5rem] overflow-hidden">
-                <img src="https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?auto=format&fit=crop&w=1200&q=80" alt="Spa salon details" className="w-full h-[420px] object-cover" />
-              </div>
             </div>
           </div>
         </section>

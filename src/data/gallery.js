@@ -36,7 +36,7 @@ export const initialGallery = [
   },
   {
     id: 'gal-6',
-    title: 'Aura Luxe Private Treatment Suite',
+    title: 'Her Glow Home Salon',
     category: 'Salon',
     image: 'https://images.unsplash.com/photo-1560750588-73207b1ef5b8?auto=format&fit=crop&w=1000&q=80',
     description: 'Minimalist champagne and Italian marble suites designed for supreme tranquility.'

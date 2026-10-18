@@ -179,6 +179,15 @@ export const AuthProvider = ({ children }) => {
     if (error) throw error;
   };
 
+  const updateEmail = async (email) => {
+    if (supabase) {
+      const { error } = await supabase.auth.updateUser({ email });
+      if (error) throw error;
+      return;
+    }
+    setUser((current) => ({ ...current, email }));
+  };
+
   const logout = async () => {
     if (supabase) {
       const { error } = await supabase.auth.signOut();
@@ -188,7 +197,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   const updateUserProfile = async (updatedFields) => {
-    if (!user || user.role !== 'customer') return;
+    if (!user || !['customer', 'admin'].includes(user.role)) return;
     const updated = await apiUpdateCustomerProfile(user.id, updatedFields);
     const nextUser = { ...user, ...updated };
     setUser(nextUser);
@@ -211,6 +220,7 @@ export const AuthProvider = ({ children }) => {
         signInWithGoogle,
         sendPasswordReset,
         updatePassword,
+        updateEmail,
         logout,
         updateUserProfile
       }}

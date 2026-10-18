@@ -9,5 +9,8 @@ export const config = {
   supabaseUrl: process.env.SUPABASE_URL,
   supabasePublishableKey: process.env.SUPABASE_PUBLISHABLE_KEY,
   supabaseSecretKey: process.env.SUPABASE_SECRET_KEY,
-  supabaseJwksUrl: process.env.SUPABASE_JWKS_URL
+  supabaseJwksUrl: process.env.SUPABASE_JWKS_URL,
+  razorpayKeyId: process.env.RAZORPAY_KEY_ID,
+  razorpayKeySecret: process.env.RAZORPAY_KEY_SECRET,
+  razorpayCurrency: process.env.RAZORPAY_CURRENCY || 'INR'
 };

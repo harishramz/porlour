@@ -17,6 +17,7 @@ import {
 } from '../components/icons';
 import { Button } from '../components/Button';
 import { supabaseConfigured } from '../services/supabase';
+import { DEFAULT_PROFILE_IMAGE, getCustomerProfileImage } from '../utils/profileImage';
 
 export const CustomerLayout = () => {
   const { user, logout, authLoading } = useAuth();
@@ -64,7 +65,7 @@ export const CustomerLayout = () => {
               <div>
                 <Link to="/" className="flex items-center gap-2">
                   <span className="font-serif text-xl font-bold tracking-wider text-charcoal-900">
-                    AURA LUXE
+                    HER GLOW
                   </span>
                   <span className="text-[10px] bg-gold-100 text-gold-800 font-semibold px-2 py-0.5 rounded-full uppercase tracking-wider">
                     Member Lounge
@@ -83,9 +84,12 @@ export const CustomerLayout = () => {
 
               <div className="hidden sm:flex items-center gap-2.5 pl-3 border-l border-beige-200">
                 <img
-                  src={user.avatar || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80'}
+                  src={getCustomerProfileImage(user.avatar)}
                   alt={user.name}
                   className="w-9 h-9 rounded-full object-cover border border-gold-300 shadow-sm"
+                  onError={(event) => {
+                    event.currentTarget.src = DEFAULT_PROFILE_IMAGE;
+                  }}
                 />
                 <div className="text-left">
                   <p className="text-xs font-bold text-charcoal-900 leading-tight">{user.name}</p>

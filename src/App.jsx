@@ -22,6 +22,7 @@ import { Login } from './pages/Login';
 import { Register } from './pages/Register';
 import { ForgotPassword } from './pages/ForgotPassword';
 import { BookAppointment } from './pages/BookAppointment';
+import { PaymentTerms } from './pages/PaymentTerms';
 
 // Customer Pages
 import { CustomerDashboard } from './pages/customer/Dashboard';
@@ -41,8 +42,25 @@ import { AdminCustomers } from './pages/admin/Customers';
 import { AdminOffers } from './pages/admin/Offers';
 import { AdminGallery } from './pages/admin/Gallery';
 import { AdminReports } from './pages/admin/Reports';
+import { AdminProfile } from './pages/admin/AdminProfile';
+import { AdminAccounts } from './pages/admin/AdminAccounts';
+import { supabaseConfigured } from './services/supabase';
 
 export default function App() {
+  if (import.meta.env.PROD && !supabaseConfigured) {
+    return (
+      <main className="min-h-screen bg-cream-50 flex items-center justify-center p-6">
+        <section className="max-w-xl rounded-2xl border border-beige-200 bg-white p-8 shadow-subtle">
+          <h1 className="font-serif text-2xl font-bold text-charcoal-900">Website setup required</h1>
+          <p className="mt-3 text-sm text-charcoal-600">
+            This site requires its Supabase project URL and publishable key to be configured before it can serve customers.
+            No sample accounts or demo data are available on the hosted site.
+          </p>
+        </section>
+      </main>
+    );
+  }
+
   return (
     <AuthProvider>
       <ToastProvider>
@@ -63,6 +81,7 @@ export default function App() {
                 <Route path="/register" element={<Register />} />
                 <Route path="/forgot-password" element={<ForgotPassword />} />
                 <Route path="/book-appointment" element={<BookAppointment />} />
+                <Route path="/payment-terms" element={<PaymentTerms />} />
               </Route>
 
               {/* Customer Lounge Routes with CustomerLayout */}
@@ -88,6 +107,8 @@ export default function App() {
                 <Route path="offers" element={<AdminOffers />} />
                 <Route path="gallery" element={<AdminGallery />} />
                 <Route path="reports" element={<AdminReports />} />
+                <Route path="profile" element={<AdminProfile />} />
+                <Route path="admins" element={<AdminAccounts />} />
               </Route>
 
               {/* Catch-all redirect to Home */}

@@ -49,6 +49,7 @@ export const AdminServices = () => {
     shortDescription: '',
     description: '',
     price: 1500,
+    variants: [],
     duration: '60 mins',
     image: 'https://images.unsplash.com/photo-1562322140-8baeececf3df?auto=format&fit=crop&w=800&q=80',
     status: 'Active',
@@ -90,6 +91,7 @@ export const AdminServices = () => {
       shortDescription: service.shortDescription || '',
       description: service.description || '',
       price: service.price,
+      variants: service.variants || [],
       duration: service.duration,
       image: service.image,
       status: service.status || 'Active',
@@ -104,14 +106,30 @@ export const AdminServices = () => {
       addToast('Please provide a service title.', 'error');
       return;
     }
+    if (formData.variants.some((variant) => !variant.name.trim())) {
+      addToast('Please provide a name for every service option.', 'error');
+      return;
+    }
     setSubmitting(true);
     try {
+      const variants = formData.variants.map((variant) => ({
+        ...variant,
+        name: variant.name.trim(),
+        price: variant.price === '' ? null : variant.price == null ? null : Number(variant.price)
+      }));
+      const firstPricedVariant = variants.find((variant) => variant.price != null) || variants[0];
+      const serviceData = {
+        ...formData,
+        variants,
+        price: variants.length ? firstPricedVariant?.price ?? null : Number(formData.price),
+        priceOnRequest: variants.length ? variants.every((variant) => variant.price == null) : false
+      };
       if (isEditing && currentEditId) {
-        await updateService(currentEditId, formData);
-        addToast(`Service "${formData.name}" updated successfully.`, 'success');
+        await updateService(currentEditId, serviceData);
+        addToast(`Service "${serviceData.name}" updated successfully.`, 'success');
       } else {
-        await createService(formData);
-        addToast(`New service "${formData.name}" created!`, 'success');
+        await createService(serviceData);
+        addToast(`New service "${serviceData.name}" created!`, 'success');
       }
       setModalOpen(false);
       await fetchServicesData();
@@ -142,7 +160,8 @@ export const AdminServices = () => {
       const matchesCat = categoryFilter === 'All' || s.category.toLowerCase() === categoryFilter.toLowerCase();
       const matchesSearch =
         s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        s.category.toLowerCase().includes(searchQuery.toLowerCase());
+        s.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        s.variants?.some((option) => option.name.toLowerCase().includes(searchQuery.toLowerCase()));
       return matchesCat && matchesSearch;
     });
   }, [services, categoryFilter, searchQuery]);
@@ -219,7 +238,6 @@ export const AdminServices = () => {
                 <th className="py-3 px-4 font-semibold">Category</th>
                 <th className="py-3 px-4 font-semibold">Duration</th>
                 <th className="py-3 px-4 font-semibold">Price</th>
-                <th className="py-3 px-4 font-semibold">Rating</th>
                 <th className="py-3 px-4 font-semibold">Status</th>
                 <th className="py-3 px-4 font-semibold text-right">Actions</th>
               </tr>
@@ -253,10 +271,11 @@ export const AdminServices = () => {
                     {service.duration}
                   </td>
                   <td className="py-3 px-4 font-serif font-bold text-charcoal-900 whitespace-nowrap">
-                    ₹{service.price.toLocaleString('en-IN')}
-                  </td>
-                  <td className="py-3 px-4 whitespace-nowrap">
-                    ★ {service.rating} <span className="text-charcoal-400 text-xs">({service.reviewsCount})</span>
+                    {service.variants?.length
+                      ? `${service.variants.length} options`
+                      : service.priceOnRequest
+                        ? 'On request'
+                        : `₹${service.price.toLocaleString('en-IN')}`}
                   </td>
                   <td className="py-3 px-4 whitespace-nowrap">
                     <Badge variant={service.status}>{service.status}</Badge>
@@ -330,18 +349,89 @@ export const AdminServices = () => {
               </select>
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-charcoal-700 mb-1">
-                Price (₹) <span className="text-rose-500">*</span>
-              </label>
-              <input
-                type="number"
-                required
-                min="100"
-                value={formData.price}
-                onChange={(e) => setFormData({ ...formData, price: Number(e.target.value) })}
-                className="w-full text-xs sm:text-sm p-3 rounded-xl border border-beige-300 focus:outline-none focus:ring-2 focus:ring-gold-400"
-              />
+            {formData.variants.length === 0 && (
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-charcoal-700 mb-1">
+                  Price (₹) <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="number"
+                  required
+                  min="0"
+                  value={formData.price ?? ''}
+                  onChange={(e) => setFormData({ ...formData, price: Number(e.target.value) })}
+                  className="w-full text-xs sm:text-sm p-3 rounded-xl border border-beige-300 focus:outline-none focus:ring-2 focus:ring-gold-400"
+                />
+              </div>
+            )}
+
+            <div className="sm:col-span-2 rounded-xl border border-beige-200 p-4 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-charcoal-700">Service options</h3>
+                  <p className="text-xs text-charcoal-500 mt-1">Add choices such as Honey or Rica waxing. Customers can select one option.</p>
+                </div>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setFormData({
+                    ...formData,
+                    variants: [...formData.variants, { id: `option-${Date.now()}`, name: '', price: null }]
+                  })}
+                >
+                  Add option
+                </Button>
+              </div>
+              {formData.variants.map((variant, index) => (
+                <div key={variant.id || index} className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-2 items-end">
+                  <label className="text-xs font-medium text-charcoal-600">
+                    Option name
+                    <input
+                      type="text"
+                      required
+                      value={variant.name}
+                      onChange={(e) => setFormData({
+                        ...formData,
+                        variants: formData.variants.map((item, itemIndex) =>
+                          itemIndex === index ? { ...item, name: e.target.value } : item
+                        )
+                      })}
+                      placeholder="e.g. Honey"
+                      className="mt-1 w-full text-sm p-2.5 rounded-lg border border-beige-300 focus:outline-none focus:ring-2 focus:ring-gold-400"
+                    />
+                  </label>
+                  <label className="text-xs font-medium text-charcoal-600">
+                    Price (₹), leave blank if unpriced
+                    <input
+                      type="number"
+                      min="0"
+                      value={variant.price ?? ''}
+                      onChange={(e) => setFormData({
+                        ...formData,
+                        variants: formData.variants.map((item, itemIndex) =>
+                          itemIndex === index
+                            ? { ...item, price: e.target.value === '' ? null : Number(e.target.value) }
+                            : item
+                        )
+                      })}
+                      className="mt-1 w-full text-sm p-2.5 rounded-lg border border-beige-300 focus:outline-none focus:ring-2 focus:ring-gold-400"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setFormData({
+                      ...formData,
+                      variants: formData.variants.filter((_, itemIndex) => itemIndex !== index)
+                    })}
+                    className="p-2.5 text-rose-600 hover:bg-rose-50 rounded-lg"
+                    aria-label={`Remove option ${variant.name || index + 1}`}
+                    title="Remove option"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              ))}
             </div>
 
             <div>
