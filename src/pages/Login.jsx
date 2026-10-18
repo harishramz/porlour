@@ -19,6 +19,7 @@ export const Login = () => {
   const { addToast } = useToast();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const demoMode = import.meta.env.DEV && !supabaseConfigured;
 
   const getReturnPath = (fallback) => {
     const path = searchParams.get('returnTo');
@@ -32,10 +33,8 @@ export const Login = () => {
   const [emailConfirmed, setEmailConfirmed] = useState(
     searchParams.get('confirmation') === 'confirmed'
   );
-  const [email, setEmail] = useState(
-    searchParams.get('email') || (supabaseConfigured ? '' : 'harish.varma@example.com')
-  );
-  const [password, setPassword] = useState(supabaseConfigured ? '' : 'password123');
+  const [email, setEmail] = useState(searchParams.get('email') || '');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [needsConfirmation, setNeedsConfirmation] = useState(false);
 
@@ -52,7 +51,7 @@ export const Login = () => {
     setLoading(true);
 
     try {
-      if (supabaseConfigured) {
+      if (!demoMode) {
         setNeedsConfirmation(false);
         const authenticatedUser = await signInWithPassword(email, password);
         addToast('Welcome back!', 'success');
@@ -108,7 +107,7 @@ export const Login = () => {
 
   const handleGoogleLogin = async () => {
     try {
-      if (supabaseConfigured) {
+      if (!demoMode) {
         await signInWithGoogle();
         return;
       }
@@ -159,7 +158,7 @@ export const Login = () => {
             </div>
 
             {/* Quick 1-Click Demo Logins */}
-            {!supabaseConfigured && <div className="bg-cream-50 p-3.5 rounded-2xl border border-beige-200 mb-6">
+            {demoMode && <div className="bg-cream-50 p-3.5 rounded-2xl border border-beige-200 mb-6">
               <span className="text-[11px] font-bold text-charcoal-600 uppercase tracking-wider block mb-2 text-center">
                 Instant Demo Access:
               </span>

@@ -6,6 +6,7 @@ import { getAuthenticatedProfile, supabase, supabaseConfigured } from '../servic
 const AuthContext = createContext(null);
 
 const AUTH_STORAGE_KEY = 'aura_luxe_auth_state';
+const demoMode = import.meta.env.DEV && !supabaseConfigured;
 const getEmailConfirmationRedirectUrl = () => `${window.location.origin}/login?confirmation=confirmed`;
 const guestUser = {
   id: null,
@@ -17,7 +18,7 @@ const guestUser = {
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(() => {
-    if (supabaseConfigured) return guestUser;
+    if (!demoMode) return guestUser;
     try {
       const saved = localStorage.getItem(AUTH_STORAGE_KEY);
       if (saved) return JSON.parse(saved);
@@ -30,7 +31,7 @@ export const AuthProvider = ({ children }) => {
       isAuthenticated: true
     };
   });
-  const [authLoading, setAuthLoading] = useState(supabaseConfigured);
+  const [authLoading, setAuthLoading] = useState(!demoMode);
 
   useEffect(() => {
     if (!supabase) return undefined;
@@ -72,7 +73,7 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   useEffect(() => {
-    if (supabaseConfigured) return;
+    if (!demoMode) return;
     try {
       localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(user));
     } catch (e) {
@@ -81,7 +82,7 @@ export const AuthProvider = ({ children }) => {
   }, [user]);
 
   const login = (userData) => {
-    if (supabaseConfigured) return user;
+    if (!demoMode) return user;
     const updated = {
       ...userData,
       isAuthenticated: true
@@ -91,7 +92,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   const loginAsCustomer = (customerData = initialCustomers[0]) => {
-    if (supabaseConfigured) return user;
+    if (!demoMode) return user;
     return login({
       ...customerData,
       role: 'customer'
@@ -99,7 +100,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   const loginAsAdmin = () => {
-    if (supabaseConfigured) return user;
+    if (!demoMode) return user;
     const adminUser = {
       id: 'admin-1',
       name: 'Super Admin Manager',

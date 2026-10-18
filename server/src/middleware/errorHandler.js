@@ -1,14 +1,14 @@
 import { ZodError } from 'zod';
 
 export const notFound = (req, res) => {
-  res.status(404).json({ error: `Route not found: ${req.method} ${req.path}` });
+  res.status(404).json({ error: 'Route not found.' });
 };
 
 export const errorHandler = (error, req, res, next) => {
   if (res.headersSent) return next(error);
 
   if (error instanceof ZodError) {
-    return res.status(400).json({ error: 'Request validation failed.', details: error.issues });
+    return res.status(400).json({ error: 'Request validation failed.' });
   }
 
   console.error(error);
