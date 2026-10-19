@@ -21,5 +21,8 @@ app.use(express.json({ limit: '1mb' }));
 app.use('/api', rateLimit({ windowMs: 15 * 60 * 1000, limit: 300 }));
 app.use('/api/payments', rateLimit({ windowMs: 15 * 60 * 1000, limit: 20, message: { error: 'Too many payment requests. Please try again later.' } }));
 app.use('/api', apiRouter);
+// Vercel service routing may mount this service at /api or strip that prefix.
+// Keep both forms working so local and hosted requests share the same API.
+app.use('/', apiRouter);
 app.use(notFound);
 app.use(errorHandler);
