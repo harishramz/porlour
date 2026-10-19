@@ -142,17 +142,16 @@ The frontend reads and writes salon catalog data, appointments, customer profile
 
 ### Deploying to Vercel
 
-Deploy this repository as two Vercel projects so the frontend and the Express API can have separate environment variables and deployment settings:
+Deploy this repository as one Vercel project with the services defined in [`vercel.json`](./vercel.json). The `app` service builds the Vite frontend from the repository root, and the `server` service runs the Express API from `server/`.
 
-1. Create the **frontend** Vercel project from this repository with the repository root as its Root Directory. Use `npm run build` as the Build Command and `dist` as the Output Directory.
-2. Add these frontend environment variables in Vercel for Preview and Production:
+1. Import the repository as one Vercel project. Vercel will build both services from [`vercel.json`](./vercel.json), route `/api/*` to `server`, and route all other paths to `app`.
+2. Add these shared project environment variables in Vercel for Preview and Production:
    - `VITE_SUPABASE_URL` — the Supabase project URL.
    - `VITE_SUPABASE_PUBLISHABLE_KEY` — the Supabase publishable key only.
-   - `VITE_API_BASE_URL` — the full API URL ending in `/api`, for example `https://your-api-project.vercel.app/api`.
-3. Create a second Vercel project from the same repository and set its Root Directory to `server`. Deploy it as a Node.js/Express project. Do not add frontend `VITE_` variables to this project.
-4. Add these server environment variables to the API project for Preview and Production: `PORT`, `CLIENT_ORIGINS` (the exact frontend HTTPS URL), `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `SUPABASE_JWKS_URL`, `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, and `RAZORPAY_CURRENCY=INR`.
-5. Run `server/supabase/schema.sql` in the same Supabase project before accepting registrations, appointments, uploads, or payments. Provision the first administrator from a protected local environment with `npm run server:admin-setup`, then remove `ADMIN_PASSWORD` from the server environment.
-6. Verify `https://your-api-project.vercel.app/api/health`, sign-in, admin authorization, appointment creation, and Razorpay Test Mode before switching to live payment credentials.
+   - `VITE_API_BASE_URL` — leave unset to use the same-domain `/api` rewrite, or set it to `/api`.
+3. Add these server environment variables to the `server` service for Preview and Production: `PORT`, `CLIENT_ORIGINS` (the exact public HTTPS origin if using a custom domain), `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `SUPABASE_JWKS_URL`, `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, and `RAZORPAY_CURRENCY=INR`.
+4. Run `server/supabase/schema.sql` in the same Supabase project before accepting registrations, appointments, uploads, or payments. Provision the first administrator from a protected local environment with `npm run server:admin-setup`, then remove `ADMIN_PASSWORD` from the server environment.
+5. Verify `/api/health`, sign-in, admin authorization, appointment creation, and Razorpay Test Mode before switching to live payment credentials.
 
 Never put `SUPABASE_SECRET_KEY`, `RAZORPAY_KEY_SECRET`, database passwords, or `ADMIN_PASSWORD` in frontend Vercel variables, `VITE_` variables, public files, or GitHub. See [SECURITY.md](./SECURITY.md) for the complete deployment policy.
 

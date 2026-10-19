@@ -2,17 +2,18 @@ import cors from 'cors';
 import express from 'express';
 import helmet from 'helmet';
 import { rateLimit } from 'express-rate-limit';
-import { config } from './config.js';
+import { config, isAllowedOrigin } from './config.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
 import { apiRouter } from './routes/api.js';
 
 export const app = express();
+export default app;
 
 app.disable('x-powered-by');
 app.use(helmet());
 app.use(cors({
   origin(origin, callback) {
-    if (!origin || config.clientOrigins.includes(origin)) return callback(null, true);
+    if (isAllowedOrigin(origin)) return callback(null, true);
     callback(new Error('Origin is not allowed by CORS.'));
   }
 }));

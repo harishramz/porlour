@@ -1,11 +1,17 @@
 import 'dotenv/config';
 
+const vercelOrigins = [
+  process.env.VERCEL_URL && `https://${process.env.VERCEL_URL}`,
+  process.env.VERCEL_PROJECT_PRODUCTION_URL && `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+].filter(Boolean);
+
 export const config = {
   port: Number(process.env.PORT) || 4000,
   clientOrigins: (process.env.CLIENT_ORIGINS || 'http://localhost:3000')
     .split(',')
     .map((origin) => origin.trim())
-    .filter(Boolean),
+    .filter(Boolean)
+    .concat(vercelOrigins),
   supabaseUrl: process.env.SUPABASE_URL,
   supabasePublishableKey: process.env.SUPABASE_PUBLISHABLE_KEY,
   supabaseSecretKey: process.env.SUPABASE_SECRET_KEY,
@@ -14,3 +20,13 @@ export const config = {
   razorpayKeySecret: process.env.RAZORPAY_KEY_SECRET,
   razorpayCurrency: process.env.RAZORPAY_CURRENCY || 'INR'
 };
+
+export const requestOrigin = (req) => {
+  const protocol = req.get('x-forwarded-proto')?.split(',')[0]?.trim() || req.protocol;
+  return `${protocol}://${req.get('host')}`;
+};
+
+export const isAllowedOrigin = (origin) => (
+  !origin ||
+  config.clientOrigins.includes(origin)
+);

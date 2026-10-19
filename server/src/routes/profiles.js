@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import { authenticate, requireRole } from '../middleware/auth.js';
 import { requireSupabase, supabase } from '../lib/supabase.js';
-import { config } from '../config.js';
+import { config, requestOrigin } from '../config.js';
 
 const profileUpdateSchema = z.object({
   full_name: z.string().trim().min(1).max(120).optional(),
@@ -21,8 +21,10 @@ const customerCreateSchema = z.object({
 }).strict();
 
 const getAdminPasswordSetupRedirect = (req) => {
-  const requestOrigin = req.get('origin');
-  const origin = config.clientOrigins.includes(requestOrigin) ? requestOrigin : config.clientOrigins[0];
+  const configuredOrigin = req.get('origin');
+  const origin = config.clientOrigins.includes(configuredOrigin)
+    ? configuredOrigin
+    : requestOrigin(req);
   const redirect = new URL('/forgot-password', origin);
   redirect.searchParams.set('mode', 'reset');
   redirect.searchParams.set('returnTo', '/admin/login');
