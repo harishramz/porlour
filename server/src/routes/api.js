@@ -10,6 +10,7 @@ import { paymentsRouter } from './payments.js';
 
 export const apiRouter = Router();
 
+apiRouter.get('/', (req, res) => res.json({ status: 'ok' }));
 apiRouter.get('/health', (req, res) => res.json({ status: 'ok' }));
 apiRouter.get('/auth/me', requireSupabase, authenticate, asyncHandler(async (req, res) => {
   const { data, error } = await supabase
