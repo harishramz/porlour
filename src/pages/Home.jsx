@@ -1,19 +1,28 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { getServices } from '../services/api';
+import { getGallery, getOffers, getServices } from '../services/api';
 import { ServiceCard } from '../components/ServiceCard';
+import { OfferCard } from '../components/OfferCard';
 import { Button } from '../components/Button';
 import { Loading } from '../components/Loading';
-import { ArrowRight, Sparkles } from '../components/icons';
+import { ArrowRight, Image, Sparkles } from '../components/icons';
 
 export const Home = () => {
   const [services, setServices] = useState([]);
+  const [offers, setOffers] = useState([]);
+  const [gallery, setGallery] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    getServices()
-      .then(setServices)
-      .catch((error) => console.error('Failed to load salon services', error))
+    Promise.allSettled([getServices(), getOffers(), getGallery()])
+      .then(([servicesResult, offersResult, galleryResult]) => {
+        if (servicesResult.status === 'fulfilled') setServices(servicesResult.value);
+        if (offersResult.status === 'fulfilled') setOffers(offersResult.value);
+        if (galleryResult.status === 'fulfilled') setGallery(galleryResult.value);
+        if (servicesResult.status === 'rejected') console.error('Failed to load salon services', servicesResult.reason);
+        if (offersResult.status === 'rejected') console.error('Failed to load salon offers', offersResult.reason);
+        if (galleryResult.status === 'rejected') console.error('Failed to load salon gallery', galleryResult.reason);
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -88,6 +97,34 @@ export const Home = () => {
               <ServiceCard key={service.id} service={service} />
             ))}
           </div>
+        </div>
+      </section>
+
+      <section className="py-14 sm:py-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
+            <div>
+              <span className="text-xs uppercase tracking-[0.25em] text-gold-700 font-semibold block mb-2">Limited-time privileges</span>
+              <h2 className="font-serif text-3xl sm:text-4xl font-normal text-charcoal-900">Offers & Promos</h2>
+              <p className="text-sm text-charcoal-600 mt-2">Curated packages for your next glow-up.</p>
+            </div>
+            <Link to="/offers" className="shrink-0"><Button variant="outlineGold" size="sm" icon={ArrowRight} iconPosition="right">View All Offers</Button></Link>
+          </div>
+          {offers.length > 0 ? <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">{offers.slice(0, 3).map((offer) => <OfferCard key={offer.id} offer={offer} />)}</div> : <div className="rounded-2xl border border-dashed border-beige-300 bg-white px-6 py-10 text-center"><p className="font-serif text-xl text-charcoal-900">New packages are coming soon.</p><Link to="/services" className="inline-block mt-4"><Button variant="secondary" size="sm">Browse Services</Button></Link></div>}
+        </div>
+      </section>
+
+      <section className="bg-charcoal-900 py-14 sm:py-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
+            <div>
+              <span className="text-xs uppercase tracking-[0.25em] text-gold-300 font-semibold block mb-2">Our work, your inspiration</span>
+              <h2 className="font-serif text-3xl sm:text-4xl font-normal text-white">Gallery Showcase</h2>
+              <p className="text-sm text-cream-100/70 mt-2">Explore the details behind every Her Glow experience.</p>
+            </div>
+            <Link to="/gallery" className="shrink-0"><Button variant="outlineGold" size="sm" icon={ArrowRight} iconPosition="right">Explore Gallery</Button></Link>
+          </div>
+          {gallery.length > 0 ? <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">{gallery.slice(0, 6).map((item) => <Link key={item.id} to="/gallery" className="group relative aspect-square overflow-hidden rounded-xl bg-charcoal-800"><img src={item.image} alt={item.title} loading="lazy" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" /><span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-charcoal-950/90 to-transparent p-3 pt-10 text-[11px] text-white line-clamp-2">{item.title}</span></Link>)}</div> : <div className="rounded-2xl border border-white/15 border-dashed px-6 py-10 text-center"><Image size={28} className="mx-auto text-gold-300" /><p className="font-serif text-xl text-white mt-3">Our latest transformations will appear here.</p></div>}
         </div>
       </section>
     </div>
