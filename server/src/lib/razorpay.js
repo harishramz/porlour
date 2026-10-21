@@ -25,7 +25,9 @@ const razorpayRequest = async (path, options = {}) => {
   const result = await response.json().catch(() => ({}));
   if (!response.ok) {
     const error = new Error(result.error?.description || 'Razorpay request failed.');
-    error.status = response.status >= 400 && response.status < 500 ? 400 : 502;
+    error.status = response.status === 401
+      ? 401
+      : response.status >= 400 && response.status < 500 ? 400 : 502;
     throw error;
   }
   return result;

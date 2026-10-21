@@ -26,6 +26,9 @@ paymentsRouter.use(requireSupabase, authenticate);
 paymentsRouter.post('/orders', asyncHandler(async (req, res) => {
   const body = orderSchema.parse(req.body);
   const pricing = await resolveServicePricing(body);
+  if (pricing.amount < 100) {
+    return res.status(400).json({ error: 'The payment amount must be at least 100 paise.' });
+  }
   const order = await createRazorpayOrder({
     amount: pricing.amount,
     receipt: `apt_${crypto.randomUUID().replaceAll('-', '').slice(0, 28)}`,
