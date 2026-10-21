@@ -37,6 +37,7 @@ export const Login = () => {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [needsConfirmation, setNeedsConfirmation] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
 
   useEffect(() => {
     if (supabaseConfigured && !authLoading && user?.isAuthenticated) {
@@ -106,9 +107,13 @@ export const Login = () => {
   };
 
   const handleGoogleLogin = async () => {
+    setGoogleLoading(true);
     try {
       if (!demoMode) {
-        await signInWithGoogle();
+        const callbackPath = returnTo
+          ? `/login?returnTo=${encodeURIComponent(getReturnPath('/dashboard'))}`
+          : '/login';
+        await signInWithGoogle(callbackPath);
         return;
       }
       loginAsCustomer();
@@ -116,6 +121,7 @@ export const Login = () => {
       navigate('/dashboard');
     } catch (error) {
       addToast(error.message || 'Unable to sign in with Google.', 'error');
+      setGoogleLoading(false);
     }
   };
 
@@ -288,7 +294,8 @@ export const Login = () => {
             <button
               type="button"
               onClick={handleGoogleLogin}
-              className="w-full flex items-center justify-center gap-3 py-2.5 px-4 rounded-full border border-beige-300 text-xs sm:text-sm font-semibold text-charcoal-800 hover:bg-beige-50 transition-colors shadow-xs"
+              disabled={loading || googleLoading}
+              className="w-full flex items-center justify-center gap-3 py-2.5 px-4 rounded-full border border-beige-300 text-xs sm:text-sm font-semibold text-charcoal-800 hover:bg-beige-50 transition-colors shadow-xs disabled:opacity-60 disabled:cursor-not-allowed"
             >
               <svg className="w-4 h-4" viewBox="0 0 24 24">
                 <path
@@ -308,7 +315,7 @@ export const Login = () => {
                   d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
                 />
               </svg>
-              Continue with Google
+              {googleLoading ? 'Connecting to Google…' : 'Continue with Google'}
             </button>
           </div>
 

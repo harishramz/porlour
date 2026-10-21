@@ -50,8 +50,6 @@ const addDaysToDateKey = (dateKey, days) => {
 const formatDateKey = (dateKey, options) => new Date(`${dateKey}T00:00:00Z`)
   .toLocaleDateString('en-GB', { ...options, timeZone: 'UTC' });
 
-const RAZORPAY_KEY_ID = import.meta.env.VITE_RAZORPAY_KEY_ID;
-
 const loadRazorpayCheckout = () => new Promise((resolve, reject) => {
   if (window.Razorpay) {
     resolve();
@@ -66,18 +64,19 @@ const loadRazorpayCheckout = () => new Promise((resolve, reject) => {
 });
 
 const openRazorpayCheckout = ({ order, customer, serviceName, onSuccess }) => new Promise((resolve, reject) => {
-  if (!RAZORPAY_KEY_ID) {
+  const keyId = order.key_id;
+  if (!keyId) {
     reject(new Error('Online payments are not configured for this storefront.'));
     return;
   }
 
   const checkout = new window.Razorpay({
-    key: RAZORPAY_KEY_ID,
+    key: keyId,
     amount: order.amount,
     currency: order.currency,
     name: 'Her Glow Home Salon',
     description: serviceName,
-    order_id: order.orderId,
+    order_id: order.order_id,
     prefill: {
       name: customer.name,
       email: customer.email,

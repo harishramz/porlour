@@ -199,9 +199,10 @@ Admin forms for gallery images, service images, offer banners, and staff profile
 1. Create a Supabase project and run `server/supabase/schema.sql` in its SQL Editor. It backfills profiles for existing Auth users, installs secure login-time recovery, removes known bundled sample content, and adds database-verified review submission. Review the listed sample IDs in the SQL before applying it to a database containing manually created records that reuse those IDs.
 2. Copy `.env.example` to `.env.local` and set `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` using the project's URL and publishable key.
 3. For immediate email/password signup without verification emails, open **Authentication → Sign In / Providers → Email** in the Supabase dashboard and turn off **Confirm email**. Save the change. New accounts can then sign in immediately after signup. Accounts created earlier while confirmation was required may need to be manually confirmed once under **Authentication → Users**. Keep email confirmation enabled if verified email ownership is required for your application.
-4. The Express API needs `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, and `SUPABASE_JWKS_URL` in `server/.env`. Keep the secret only in `server/.env`; never put it in a `VITE_` variable or commit it. The direct Supabase flows described above do not require the Express API secret.
-5. To enable online payments, create Razorpay **Test Mode** keys first and add `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, and `RAZORPAY_CURRENCY=INR` to `server/.env`. The key secret stays on the server; only the key ID is returned to the browser. Run the updated `server/supabase/schema.sql` so captured Razorpay payment IDs cannot be reused for multiple appointments. Test the complete order, checkout, signature, captured-status, and appointment flow before switching to Live Mode keys.
-6. To create or reset the admin Auth account and set its profile role together, add the following values to the ignored `server/.env` file:
+4. To enable **Continue with Google**, open **Authentication → Sign In / Providers → Google** in Supabase, enable the provider, and add the Google OAuth client ID and secret from Google Cloud Console. Set the Google OAuth authorized redirect URI to `https://<your-project-ref>.supabase.co/auth/v1/callback` in Google Cloud Console. In Supabase **Authentication → URL Configuration**, add the exact frontend origin (for example `http://localhost:3000` and your production HTTPS origin) to the allowed redirect URLs.
+5. The Express API needs `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, and `SUPABASE_JWKS_URL` in `server/.env`. Keep the secret only in `server/.env`; never put it in a `VITE_` variable or commit it. The direct Supabase flows described above do not require the Express API secret.
+6. To enable online payments, create Razorpay **Test Mode** keys first and add `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, and `RAZORPAY_CURRENCY=INR` to `server/.env`. The key secret stays on the server; only the key ID is returned to the browser. Run the updated `server/supabase/schema.sql` so captured Razorpay payment IDs cannot be reused for multiple appointments. Test the complete order, checkout, signature, captured-status, and appointment flow before switching to Live Mode keys.
+7. To create or reset the admin Auth account and set its profile role together, add the following values to the ignored `server/.env` file:
 
 ```dotenv
 ADMIN_EMAIL=admin@example.com
@@ -216,7 +217,7 @@ npm run server:admin-setup
 
 The script uses `SUPABASE_SECRET_KEY` only on the server to create the Auth user if needed (or reset its password if it exists), confirm its email, and set `profiles.role` to `admin`. It never sends the admin password to the browser. Remove `ADMIN_PASSWORD` from `server/.env` after provisioning if you do not need to reset it again.
 
-7. Start the frontend:
+8. Start the frontend:
 
 ```bash
 npm run dev

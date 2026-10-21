@@ -36,8 +36,10 @@ paymentsRouter.post('/orders', asyncHandler(async (req, res) => {
   });
 
   res.status(201).json({
-    keyId: config.razorpayKeyId,
-    orderId: order.id,
+    // The public key is safe to expose to the browser. The secret is never
+    // returned from this endpoint.
+    key_id: config.razorpayKeyId,
+    order_id: order.id,
     amount: pricing.amount,
     currency: config.razorpayCurrency,
     servicePrice: pricing.price
@@ -52,7 +54,9 @@ paymentsRouter.post('/verify', asyncHandler(async (req, res) => {
   }
 
   const payment = await verifyRazorpayPayment({
-    ...body,
+    orderId: body.razorpayOrderId,
+    paymentId: body.razorpayPaymentId,
+    signature: body.razorpaySignature,
     expectedAmount: order.amount,
     expectedUserId: req.auth.id
   });
